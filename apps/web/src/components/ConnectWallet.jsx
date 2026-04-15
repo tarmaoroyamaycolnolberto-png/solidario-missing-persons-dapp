@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 import { CONTRACT_ADDRESS, ACTIVE_NETWORK } from "../config";
 import {
   connectWallet,
@@ -109,6 +109,32 @@ function WalletOptionIcon() {
   );
 }
 
+function RefreshIcon() {
+  return (
+    <svg
+      className="wallet-option-icon"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M20 12A8 8 0 1 1 17.66 6.34"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M20 4V10H14"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function getExplorerBaseUrl() {
   return (
     ACTIVE_NETWORK?.blockExplorerUrls?.[0]?.replace(/\/$/, "") ||
@@ -121,10 +147,43 @@ function buildAddressUrl(address) {
 }
 
 function ConnectWallet({ account, setAccount, setMessage }) {
-  const availableWallets = useMemo(() => getAvailableWallets(), []);
+  const [availableWallets, setAvailableWallets] = useState([]);
+  const [isRefreshingWallets, setIsRefreshingWallets] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+
+  function refreshWalletsList() {
+    const detected = getAvailableWallets();
+    setAvailableWallets(detected);
+    return detected;
+  }
+
+  useEffect(() => {
+    refreshWalletsList();
+  }, []);
+
+  async function handleRefreshWallets() {
+    try {
+      setIsRefreshingWallets(true);
+      setMessage("Buscando wallets disponibles...");
+
+      const detected = refreshWalletsList();
+
+      if (detected.length > 0) {
+        setMessage(`Se detectaron ${detected.length} wallet(s) compatibles`);
+      } else {
+        setMessage("No se detectaron wallets EVM en este navegador");
+      }
+    } catch (error) {
+      console.error(error);
+      setMessage("No se pudieron recargar las wallets");
+    } finally {
+      setIsRefreshingWallets(false);
+    }
+  }
 
   async function handleConnect(selectedProvider, walletName) {
     try {
+      setIsConnecting(true);
       setMessage(`Conectando ${walletName}...`);
 
       const result = await connectWallet(selectedProvider);
@@ -139,6 +198,8 @@ function ConnectWallet({ account, setAccount, setMessage }) {
     } catch (error) {
       console.error(error);
       setMessage(error.message || `Error al conectar ${walletName}`);
+    } finally {
+      setIsConnecting(false);
     }
   }
 
@@ -149,6 +210,7 @@ function ConnectWallet({ account, setAccount, setMessage }) {
       }
 
       const selected = availableWallets[0];
+      setIsConnecting(true);
       setMessage(`Solicitando cambio de cuenta en ${selected.name}...`);
 
       const result = await promptWalletAccountSelection(selected.provider);
@@ -160,6 +222,8 @@ function ConnectWallet({ account, setAccount, setMessage }) {
         error.message ||
           "No se pudo cambiar la cuenta. También puedes hacerlo desde tu wallet."
       );
+    } finally {
+      setIsConnecting(false);
     }
   }
 
@@ -175,77 +239,113 @@ function ConnectWallet({ account, setAccount, setMessage }) {
 
   return (
     <div className="wallet-profile-card improved-wallet-profile-card">
-      <div className="wallet-profile-layout improved-wallet-layout">
-        <div className="wallet-profile-header improved-wallet-header">
-          <div className="wallet-profile-avatar">
-            <ChainIcon />
-          </div>
-
-          <div className="wallet-profile-identity">
-            <div className="wallet-profile-title-row">
-              <h3 className="wallet-profile-name">
-                {isConnected ? "Solidario conectado" : "Solidario no conectado"}
-              </h3>
-
-              <span
-                className={`wallet-profile-status-badge ${
-                  isConnected ? "connected" : "disconnected"
-                }`}
-              >
-                <span className="wallet-status-dot" />
-                {isConnected ? "Wallet conectada" : "Wallet no conectada"}
-              </span>
+      <div className="wallet-connect-shell">
+        <div className="wallet-connect-main">
+          <div className="wallet-profile-header improved-wallet-header wallet-connect-main-card">
+            <div className="wallet-profile-avatar">
+              <ChainIcon />
             </div>
 
-            <p className="wallet-profile-handle">
-              {isConnected ? formatAddress(account) : "@sin-wallet"}
-            </p>
+            <div className="wallet-profile-identity">
+              <div className="wallet-profile-title-row wallet-title-row-inline">
+                <div className="wallet-title-copy">
+                  <h3 className="wallet-profile-name">
+                    {isConnected
+                      ? "Solidario conectado"
+                      : "Conecta tu wallet para comenzar"}
+                  </h3>
 
-            <div className="wallet-profile-status-row compact-wallet-status-row">
-              <span className="wallet-network-badge">
-                {ACTIVE_NETWORK?.chainName || "BNB Smart Chain"}
-              </span>
-            </div>
+                  <p className="wallet-profile-subcopy">
+                    Compatible con wallets EVM sobre{" "}
+                    {ACTIVE_NETWORK?.chainName || "BNB Smart Chain"}.
+                  </p>
+                </div>
 
-            {isConnected && (
-              <div className="wallet-session-actions">
-                <button
-                  type="button"
-                  className="secondary-button wallet-session-button"
-                  onClick={handleChangeAccount}
+                <span
+                  className={`wallet-profile-status-badge ${
+                    isConnected ? "connected" : "disconnected"
+                  }`}
                 >
-                  Cambiar cuenta
-                </button>
-
-                <button
-                  type="button"
-                  className="secondary-button wallet-session-button"
-                  onClick={handleDisconnect}
-                >
-                  Desconectar
-                </button>
+                  <span className="wallet-status-dot" />
+                  {isConnected ? "Wallet conectada" : "Wallet no conectada"}
+                </span>
               </div>
-            )}
+
+              <div className="wallet-profile-summary-grid">
+                <div className="wallet-summary-box">
+                  <span className="wallet-summary-label">Cuenta activa</span>
+                  <span className="wallet-summary-value">
+                    {isConnected ? formatAddress(account) : "@sin-wallet"}
+                  </span>
+                </div>
+
+                <div className="wallet-summary-box">
+                  <span className="wallet-summary-label">Red requerida</span>
+                  <span className="wallet-summary-value">
+                    {ACTIVE_NETWORK?.chainName || "BNB Smart Chain"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="wallet-session-actions wallet-session-actions-compact">
+                <button
+                  type="button"
+                  className="secondary-button wallet-session-button"
+                  onClick={handleRefreshWallets}
+                  disabled={isRefreshingWallets || isConnecting}
+                >
+                  <RefreshIcon />
+                  <span>
+                    {isRefreshingWallets ? "Buscando..." : "Recargar wallets"}
+                  </span>
+                </button>
+
+                {isConnected && (
+                  <>
+                    <button
+                      type="button"
+                      className="secondary-button wallet-session-button"
+                      onClick={handleChangeAccount}
+                      disabled={isConnecting}
+                    >
+                      Cambiar cuenta
+                    </button>
+
+                    <button
+                      type="button"
+                      className="secondary-button wallet-session-button"
+                      onClick={handleDisconnect}
+                      disabled={isConnecting}
+                    >
+                      Desconectar
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="wallet-profile-side improved-wallet-side">
-          <div className="wallet-selector-block improved-wallet-selector-block">
+        <div className="wallet-connect-side">
+          <div className="wallet-selector-panel">
             <div className="wallet-selector-head improved-wallet-selector-head">
-              <span className="wallet-selector-label">Wallets detectadas</span>
-              <span className="wallet-selector-note">
-                Compatible con wallets EVM
-              </span>
+              <div className="wallet-selector-copy">
+                <span className="wallet-selector-label">Wallets detectadas</span>
+                <span className="wallet-selector-note">
+                  Pulsa recargar si cambiaste de billetera o extensión.
+                </span>
+              </div>
             </div>
 
             {availableWallets.length > 0 ? (
-              <div className="wallet-options-grid improved-wallet-options-grid">
+              <div className="wallet-options-grid improved-wallet-options-grid wallet-options-grid-vertical">
                 {availableWallets.map((wallet) => (
                   <button
                     key={wallet.id}
                     type="button"
-                    className="primary-button wallet-option-button improved-wallet-option-button"
+                    className="primary-button wallet-option-button improved-wallet-option-button wallet-option-button-full"
                     onClick={() => handleConnect(wallet.provider, wallet.name)}
+                    disabled={isConnecting}
                   >
                     <WalletOptionIcon />
                     <span>{wallet.name}</span>
@@ -259,7 +359,7 @@ function ConnectWallet({ account, setAccount, setMessage }) {
             )}
           </div>
 
-          <div className="wallet-profile-info-grid improved-wallet-info-grid">
+          <div className="wallet-profile-info-grid improved-wallet-info-grid wallet-info-grid-compact">
             <div className="wallet-profile-info-card compact improved-wallet-info-card">
               <div className="wallet-profile-info-head">
                 <span className="wallet-profile-info-label">Cuenta completa</span>
