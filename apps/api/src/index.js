@@ -2,6 +2,9 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import multer from "multer";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
 dotenv.config();
 
@@ -9,9 +12,77 @@ const app = express();
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10 MB por archivo
+    fileSize: 10 * 1024 * 1024,
   },
 });
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const DATA_DIR = path.join(__dirname, "../data");
+const PROFILES_FILE = path.join(DATA_DIR, "profiles.json");
+
+function ensureProfilesStorage() {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+
+  if (!fs.existsSync(PROFILES_FILE)) {
+    fs.writeFileSync(PROFILES_FILE, JSON.stringify({}, null, 2), "utf-8");
+  }
+}
+
+function normalizeWallet(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function readProfiles() {
+  ensureProfilesStorage();
+
+  try {
+    const raw = fs.readFileSync(PROFILES_FILE, "utf-8");
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (error) {
+    console.error("Error leyendo profiles.json:", error);
+    return {};
+  }
+}
+
+function writeProfiles(data) {
+  ensureProfilesStorage();
+  fs.writeFileSync(PROFILES_FILE, JSON.stringify(data, null, 2), "utf-8");
+}
+
+function ensureProfileShape(profile = {}, wallet = "") {
+  return {
+    wallet,
+    socials: profile.socials || {
+      instagram: "",
+      facebook: "",
+      twitter: "",
+      telegram: "",
+      tiktok: "",
+    },
+    activity: Array.isArray(profile.activity) ? profile.activity : [],
+    updatedAt: profile.updatedAt || null,
+  };
+}
+
+function createPublicActivity(type, detail) {
+  const now = new Date();
+
+  return {
+    id: `public-${type}-${now.getTime()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`,
+    type,
+    detail,
+    source: "public_profile",
+    timestamp: now.toISOString(),
+    timestampLabel: now.toLocaleString(),
+  };
+}
 
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
@@ -22,6 +93,92 @@ app.get("/", (req, res) => {
 
 app.get("/health", (req, res) => {
   res.json({ ok: true });
+});
+
+app.get("/api/profile/:wallet", (req, res) => {
+  try {
+    const wallet = normalizeWallet(req.params.wallet);
+
+    if (!wallet) {
+      return res.status(400).json({
+        ok: false,
+        error: "Wallet inválida",
+      });
+    }
+
+    const profiles = readProfiles();
+    const profile = profiles[wallet]
+      ? ensureProfileShape(profiles[wallet], wallet)
+      : null;
+
+    return res.json({
+      ok: true,
+      profile,
+    });
+  } catch (error) {
+    console.error("Error en GET /api/profile/:wallet:", error);
+
+    return res.status(500).json({
+      ok: false,
+      error: "Error interno al obtener perfil",
+      details: error.message,
+    });
+  }
+});
+
+app.post("/api/profile/:wallet/socials", async (req, res) => {
+  try {
+    const wallet = normalizeWallet(req.params.wallet);
+
+    if (!wallet) {
+      return res.status(400).json({
+        ok: false,
+        error: "Wallet inválida",
+      });
+    }
+
+    const socials = {
+      instagram: String(req.body?.instagram || "").trim(),
+      facebook: String(req.body?.facebook || "").trim(),
+      twitter: String(req.body?.twitter || "").trim(),
+      telegram: String(req.body?.telegram || "").trim(),
+      tiktok: String(req.body?.tiktok || "").trim(),
+    };
+
+    const profiles = readProfiles();
+    const current = ensureProfileShape(profiles[wallet] || {}, wallet);
+
+    const nextActivity = [
+      createPublicActivity(
+        "Redes sociales actualizadas",
+        "El usuario actualizó sus redes sociales públicas"
+      ),
+      ...current.activity,
+    ];
+
+    profiles[wallet] = {
+      ...current,
+      wallet,
+      socials,
+      activity: nextActivity,
+      updatedAt: new Date().toISOString(),
+    };
+
+    writeProfiles(profiles);
+
+    return res.json({
+      ok: true,
+      profile: profiles[wallet],
+    });
+  } catch (error) {
+    console.error("Error en POST /api/profile/:wallet/socials:", error);
+
+    return res.status(500).json({
+      ok: false,
+      error: "Error interno al guardar redes sociales",
+      details: error.message,
+    });
+  }
 });
 
 app.post("/api/pinata/upload-image", upload.single("file"), async (req, res) => {
@@ -49,13 +206,16 @@ app.post("/api/pinata/upload-image", upload.single("file"), async (req, res) => 
 
     formData.append("file", blob, req.file.originalname);
 
-    const pinataRes = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.PINATA_JWT}`,
-      },
-      body: formData,
-    });
+    const pinataRes = await fetch(
+      "https://api.pinata.cloud/pinning/pinFileToIPFS",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.PINATA_JWT}`,
+        },
+        body: formData,
+      }
+    );
 
     const data = await pinataRes.json();
 
@@ -94,14 +254,17 @@ app.post("/api/pinata/upload-json", async (req, res) => {
       });
     }
 
-    const pinataRes = await fetch("https://api.pinata.cloud/pinning/pinJSONToIPFS", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.PINATA_JWT}`,
-      },
-      body: JSON.stringify(req.body),
-    });
+    const pinataRes = await fetch(
+      "https://api.pinata.cloud/pinning/pinJSONToIPFS",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.PINATA_JWT}`,
+        },
+        body: JSON.stringify(req.body),
+      }
+    );
 
     const data = await pinataRes.json();
 

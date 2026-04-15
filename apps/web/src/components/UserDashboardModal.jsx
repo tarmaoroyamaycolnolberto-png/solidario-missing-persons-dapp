@@ -4,6 +4,11 @@ import {
   getUserActivityFromEvents,
   updateCaseStatusOnChain,
 } from "../services/contract";
+import {
+  getPublicProfileByWallet,
+  getPublicActivityByWallet,
+  savePublicSocials,
+} from "../services/profile";
 import { getCurrentProvider, switchToActiveNetwork } from "../web3";
 import { ACTIVE_NETWORK } from "../config";
 
@@ -174,59 +179,6 @@ function normalizeCID(value) {
   return String(value).replace("ipfs://", "").trim();
 }
 
-function getSocialStorageKey(account) {
-  return `solidario-profile-socials-${String(account).toLowerCase()}`;
-}
-
-function getActivityStorageKey(account) {
-  return `solidario-profile-activity-${String(account).toLowerCase()}`;
-}
-
-function loadStoredSocials(account) {
-  if (!account || typeof window === "undefined") return EMPTY_SOCIALS;
-
-  try {
-    const raw = localStorage.getItem(getSocialStorageKey(account));
-    if (!raw) return EMPTY_SOCIALS;
-
-    const parsed = JSON.parse(raw);
-
-    return {
-      instagram: parsed?.instagram || "",
-      facebook: parsed?.facebook || "",
-      twitter: parsed?.twitter || "",
-      telegram: parsed?.telegram || "",
-      tiktok: parsed?.tiktok || "",
-    };
-  } catch {
-    return EMPTY_SOCIALS;
-  }
-}
-
-function saveStoredSocials(account, socials) {
-  if (!account || typeof window === "undefined") return;
-  localStorage.setItem(getSocialStorageKey(account), JSON.stringify(socials));
-}
-
-function loadStoredActivity(account) {
-  if (!account || typeof window === "undefined") return [];
-
-  try {
-    const raw = localStorage.getItem(getActivityStorageKey(account));
-    if (!raw) return [];
-
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveStoredActivity(account, activity) {
-  if (!account || typeof window === "undefined") return;
-  localStorage.setItem(getActivityStorageKey(account), JSON.stringify(activity));
-}
-
 function createActivityEntry(type, detail, source = "local") {
   const now = new Date();
   return {
@@ -344,11 +296,15 @@ function getChangeStatusButtonText(status) {
 }
 
 function getActivitySourceClass(source) {
-  return source === "blockchain" ? "blockchain" : "local";
+  if (source === "blockchain") return "blockchain";
+  if (source === "public_profile") return "local";
+  return "local";
 }
 
 function getActivitySourceLabel(source) {
-  return source === "blockchain" ? "Blockchain" : "Local";
+  if (source === "blockchain") return "Blockchain";
+  if (source === "public_profile") return "Perfil público";
+  return "Local";
 }
 
 function UserDashboardModal({
@@ -369,7 +325,7 @@ function UserDashboardModal({
   const [isSavingSocials, setIsSavingSocials] = useState(false);
   const [socialsSavedAt, setSocialsSavedAt] = useState("");
 
-  const [activityLog, setActivityLog] = useState([]);
+  const [publicProfileActivity, setPublicProfileActivity] = useState([]);
   const [chainActivity, setChainActivity] = useState([]);
   const [isLoadingActivity, setIsLoadingActivity] = useState(false);
 
@@ -428,19 +384,33 @@ function UserDashboardModal({
   }, [isOpen, viewerAccount]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    async function loadPublicProfile() {
+      if (!isOpen) return;
 
-    if (!account) {
-      setSocials(EMPTY_SOCIALS);
-      setSocialsSavedAt("");
-      setActivityLog([]);
-      setChainActivity([]);
-      return;
+      if (!account) {
+        setSocials(EMPTY_SOCIALS);
+        setSocialsSavedAt("");
+        setPublicProfileActivity([]);
+        setChainActivity([]);
+        return;
+      }
+
+      try {
+        const profile = await getPublicProfileByWallet(account);
+        const publicActivity = await getPublicActivityByWallet(account);
+
+        setSocials(profile?.socials || EMPTY_SOCIALS);
+        setSocialsSavedAt(profile?.updatedAt || "");
+        setPublicProfileActivity(publicActivity);
+      } catch (error) {
+        console.error("Error cargando perfil público:", error);
+        setSocials(EMPTY_SOCIALS);
+        setSocialsSavedAt("");
+        setPublicProfileActivity([]);
+      }
     }
 
-    setSocials(loadStoredSocials(account));
-    setActivityLog(loadStoredActivity(account));
-    setSocialsSavedAt("");
+    loadPublicProfile();
   }, [isOpen, account]);
 
   async function loadMyCases() {
@@ -516,16 +486,11 @@ function UserDashboardModal({
 
   function appendActivity(entry) {
     if (!account) return;
-
-    setActivityLog((prev) => {
-      const next = [entry, ...prev];
-      saveStoredActivity(account, next);
-      return next;
-    });
+    setPublicProfileActivity((prev) => [entry, ...prev]);
   }
 
   const mergedActivity = useMemo(() => {
-    const combined = [...activityLog, ...chainActivity];
+    const combined = [...publicProfileActivity, ...chainActivity];
 
     return combined.sort((a, b) => {
       if (a.timestamp && b.timestamp) {
@@ -535,7 +500,7 @@ function UserDashboardModal({
       if (!a.timestamp && b.timestamp) return 1;
       return 0;
     });
-  }, [activityLog, chainActivity]);
+  }, [publicProfileActivity, chainActivity]);
 
   const socialEntries = useMemo(() => {
     return [
@@ -585,19 +550,19 @@ function UserDashboardModal({
         tiktok: socials.tiktok.trim(),
       };
 
-      saveStoredSocials(account, normalized);
-      setSocials(normalized);
+      const savedProfile = await savePublicSocials(account, normalized);
+      setSocials(savedProfile?.socials || normalized);
 
       const now = new Date();
       const timeText = now.toLocaleString();
 
-      setSocialsSavedAt(timeText);
+      setSocialsSavedAt(savedProfile?.updatedAt || timeText);
 
       appendActivity(
         createActivityEntry(
           "Redes sociales",
           "Se actualizaron las redes sociales del perfil",
-          "local"
+          "public_profile"
         )
       );
 
@@ -661,7 +626,7 @@ function UserDashboardModal({
         createActivityEntry(
           "Cambio de estado",
           `Caso #${activePoster.id} marcado como ${getStatusLabel(nextStatus)}`,
-          "local"
+          "public_profile"
         )
       );
 
@@ -1036,9 +1001,7 @@ function UserDashboardModal({
                   </span>
                 ) : (
                   <span className="user-social-saved-text muted">
-                    {isOwnProfile
-                      ? "Edita y guarda tus redes"
-                      : "Modo consulta"}
+                    {isOwnProfile ? "Edita y guarda tus redes" : "Modo consulta"}
                   </span>
                 )}
               </div>
@@ -1093,7 +1056,7 @@ function UserDashboardModal({
               </div>
 
               <p className="user-modal-panel-text">
-                Aquí verás actividad local del panel y también eventos reales del
+                Aquí verás actividad pública del perfil y también eventos reales del
                 contrato.
               </p>
 

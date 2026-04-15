@@ -1,0 +1,23 @@
+{
+  "0xbb80938b8e58a2b232a457082dc7d72adcc910f2": {
+    "wallet": "0xbb80938b8e58a2b232a457082dc7d72adcc910f2",
+    "socials": {
+      "instagram": "",
+      "facebook": "",
+      "twitter": "@OroyaTarma31097",
+      "telegram": "",
+      "tiktok": ""
+    },
+    "activity": [
+      {
+        "id": "public-Redes sociales actualizadas-1776288090756-ttzqqe",
+        "type": "Redes sociales actualizadas",
+        "detail": "El usuario actualizó sus redes sociales públicas",
+        "source": "public_profile",
+        "timestamp": "2026-04-15T21:21:30.756Z",
+        "timestampLabel": "15/4/2026, 4:21:30 p. m."
+      }
+    ],
+    "updatedAt": "2026-04-15T21:21:30.820Z"
+  }
+}
