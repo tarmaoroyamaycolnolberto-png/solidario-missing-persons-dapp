@@ -10,6 +10,14 @@
     },
     "activity": [
       {
+        "id": "public-Redes sociales actualizadas-1776288526797-s53xi5",
+        "type": "Redes sociales actualizadas",
+        "detail": "El usuario actualizó sus redes sociales públicas",
+        "source": "public_profile",
+        "timestamp": "2026-04-15T21:28:46.797Z",
+        "timestampLabel": "15/4/2026, 4:28:46 p. m."
+      },
+      {
         "id": "public-Redes sociales actualizadas-1776288090756-ttzqqe",
         "type": "Redes sociales actualizadas",
         "detail": "El usuario actualizó sus redes sociales públicas",
@@ -18,6 +26,6 @@
         "timestampLabel": "15/4/2026, 4:21:30 p. m."
       }
     ],
-    "updatedAt": "2026-04-15T21:21:30.820Z"
+    "updatedAt": "2026-04-15T21:28:46.851Z"
   }
 }

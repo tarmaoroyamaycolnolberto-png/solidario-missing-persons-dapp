@@ -6,7 +6,6 @@ import ExploreCases from "./components/ExploreCases";
 import UserDashboardModal from "./components/UserDashboardModal";
 import { PROJECT_SUPPORT_WALLET } from "./config";
 import {
-  getConnectedAccount,
   getCurrentProvider,
   getWalletWeb3,
   resetWalletConnection,
@@ -97,54 +96,14 @@ function SunIcon() {
       xmlns="http://www.w3.org/2000/svg"
     >
       <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" />
-      <path
-        d="M12 2.5V5"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M12 19V21.5"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M21.5 12H19"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M5 12H2.5"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M18.72 5.28L16.95 7.05"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M7.05 16.95L5.28 18.72"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M18.72 18.72L16.95 16.95"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M7.05 7.05L5.28 5.28"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
+      <path d="M12 2.5V5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M12 19V21.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M21.5 12H19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M5 12H2.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M18.72 5.28L16.95 7.05" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M7.05 16.95L5.28 18.72" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M18.72 18.72L16.95 16.95" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M7.05 7.05L5.28 5.28" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }
@@ -218,13 +177,35 @@ function App() {
     setSelectedUserAccount("");
   }
 
+  function scrollToReadCase() {
+    const readSection = document.getElementById("leer");
+    if (readSection) {
+      readSection.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }
+
+  function handleSelectCase(caseId) {
+    setSelectedCaseId(String(caseId));
+    scrollToReadCase();
+  }
+
+  function handleSelectCaseFromUserModal(caseId) {
+    setSelectedCaseId(String(caseId));
+    setIsUserModalOpen(false);
+    setTimeout(() => {
+      scrollToReadCase();
+    }, 120);
+    setMessage(`Caso ${caseId} enviado al lector`);
+  }
+
   useEffect(() => {
     document.body.classList.remove("theme-light", "theme-dark");
     document.body.classList.add(`theme-${theme}`);
     localStorage.setItem("solidario-theme", theme);
   }, [theme]);
-
-
 
   useEffect(() => {
     if (!showSupportToast) return;
@@ -270,7 +251,7 @@ function App() {
         provider.removeListener("chainChanged", handleChainChanged);
       }
     };
-  }, [account]);
+  }, []);
 
   async function handleSupportProject() {
     try {
@@ -324,16 +305,8 @@ function App() {
             type="button"
             className="theme-toggle-button"
             onClick={toggleTheme}
-            aria-label={
-              theme === "light"
-                ? "Activar modo oscuro"
-                : "Activar modo claro"
-            }
-            title={
-              theme === "light"
-                ? "Cambiar a modo oscuro"
-                : "Cambiar a modo claro"
-            }
+            aria-label={theme === "light" ? "Activar modo oscuro" : "Activar modo claro"}
+            title={theme === "light" ? "Cambiar a modo oscuro" : "Cambiar a modo claro"}
           >
             {theme === "light" ? <MoonIcon /> : <SunIcon />}
           </button>
@@ -347,16 +320,8 @@ function App() {
             className={`nav-account-button ${!account ? "disabled" : ""}`}
             onClick={handleOpenOwnPanel}
             disabled={!account}
-            aria-label={
-              account
-                ? "Abrir panel del usuario"
-                : "Conecta tu wallet para abrir tu panel"
-            }
-            title={
-              account
-                ? "Abrir panel del usuario"
-                : "Conecta tu wallet para abrir tu panel"
-            }
+            aria-label={account ? "Abrir panel del usuario" : "Conecta tu wallet para abrir tu panel"}
+            title={account ? "Abrir panel del usuario" : "Conecta tu wallet para abrir tu panel"}
           >
             {account ? (
               <span className="nav-account-chip">
@@ -419,7 +384,9 @@ function App() {
                       </h3>
                     </div>
 
-
+                    <div className="project-support-pointer-wrap">
+                      <SupportPointerIcon />
+                    </div>
                   </div>
 
                   <p className="project-support-text">
@@ -449,9 +416,7 @@ function App() {
                       disabled={isSupportingProject}
                     >
                       <HeartSupportIcon />
-                      <span>
-                        {isSupportingProject ? "Apoyando..." : "Apoyar"}
-                      </span>
+                      <span>{isSupportingProject ? "Apoyando..." : "Apoyar"}</span>
                     </button>
                   </div>
                 </div>
@@ -528,17 +493,7 @@ function App() {
 
           <ExploreCases
             setMessage={setMessage}
-            onSelectCase={(caseId) => {
-              setSelectedCaseId(String(caseId));
-
-              const readSection = document.getElementById("leer");
-              if (readSection) {
-                readSection.scrollIntoView({
-                  behavior: "smooth",
-                  block: "start",
-                });
-              }
-            }}
+            onSelectCase={handleSelectCase}
           />
         </section>
       </main>
@@ -549,6 +504,7 @@ function App() {
         account={selectedUserAccount || account}
         viewerAccount={account}
         setMessage={setMessage}
+        onSelectCase={handleSelectCaseFromUserModal}
       />
 
       {showSupportToast && (

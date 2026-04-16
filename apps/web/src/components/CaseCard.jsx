@@ -293,49 +293,49 @@ function CaseCard({
             ) : null}
           </div>
 
-          {currentImage ? (
-            <div className="case-image-frame">
-              <img
-                className="case-image improved-case-image"
-                src={currentImage}
-                alt={caseMetadata?.name || "Afiche"}
-              />
-            </div>
-          ) : (
-            <div className="empty-image">
-              No hay imagen disponible para este caso
-            </div>
-          )}
+{currentImage ? (
+  <div className="case-image-stage">
+    <div className="case-image-frame">
+      <img
+        className="case-image improved-case-image"
+        src={currentImage}
+        alt={caseMetadata?.name || "Afiche"}
+      />
+    </div>
 
-          {galleryImages.length > 1 && (
-            <div className="case-gallery-controls">
-              <button
-                type="button"
-                className="gallery-nav-button"
-                onClick={handlePrevImage}
-                aria-label="Imagen anterior"
-                title="Imagen anterior"
-              >
-                <ChevronLeftIcon />
-                <span className="gallery-nav-text">Anterior</span>
-              </button>
+    {galleryImages.length > 1 && (
+      <>
+        <button
+          type="button"
+          className="case-overlay-nav case-overlay-nav-left"
+          onClick={handlePrevImage}
+          aria-label="Imagen anterior"
+          title="Imagen anterior"
+        >
+          <ChevronLeftIcon />
+        </button>
 
-              <span className="gallery-counter">
-                {activeImageIndex + 1} / {galleryImages.length}
-              </span>
+        <button
+          type="button"
+          className="case-overlay-nav case-overlay-nav-right"
+          onClick={handleNextImage}
+          aria-label="Imagen siguiente"
+          title="Imagen siguiente"
+        >
+          <ChevronRightIcon />
+        </button>
 
-              <button
-                type="button"
-                className="gallery-nav-button"
-                onClick={handleNextImage}
-                aria-label="Imagen siguiente"
-                title="Imagen siguiente"
-              >
-                <span className="gallery-nav-text">Siguiente</span>
-                <ChevronRightIcon />
-              </button>
-            </div>
-          )}
+        <div className="case-overlay-counter">
+          {activeImageIndex + 1} / {galleryImages.length}
+        </div>
+      </>
+    )}
+  </div>
+) : (
+  <div className="empty-image">
+    No hay imagen disponible para este caso
+  </div>
+)}
         </div>
 
         <div className="case-content improved-case-content">

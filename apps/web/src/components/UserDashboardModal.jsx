@@ -169,6 +169,40 @@ function ExternalLinkIcon() {
   );
 }
 
+function OpenCaseIcon() {
+  return (
+    <svg
+      className="user-inline-link-icon"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M9 5H19V15"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M19 5L8 16"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M5 9V19H15"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function formatAddress(address) {
   if (!address) return "Sin wallet conectada";
   return `${address.slice(0, 8)}...${address.slice(-6)}`;
@@ -277,6 +311,20 @@ function ipfsToHttp(value) {
   return value;
 }
 
+function buildPosterGallery(metadata) {
+  if (!metadata) return [];
+
+  const gallery = Array.isArray(metadata.gallery) ? metadata.gallery : [];
+  const poster = metadata.posterImage || metadata.image;
+
+  const combined = [...gallery];
+  if (poster && !combined.includes(poster)) {
+    combined.unshift(poster);
+  }
+
+  return combined.map(ipfsToHttp).filter(Boolean);
+}
+
 function getStatusLabel(status) {
   return Number(status) === 1 ? "Encontrado" : "Desaparecido";
 }
@@ -313,11 +361,13 @@ function UserDashboardModal({
   account,
   viewerAccount,
   setMessage = () => {},
+  onSelectCase,
 }) {
   const [activeTab, setActiveTab] = useState("posters");
   const [myCases, setMyCases] = useState([]);
   const [isLoadingCases, setIsLoadingCases] = useState(false);
   const [activePosterIndex, setActivePosterIndex] = useState(0);
+  const [activePosterImageIndex, setActivePosterImageIndex] = useState(0);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [chainId, setChainId] = useState("");
 
@@ -417,6 +467,7 @@ function UserDashboardModal({
     if (!account) {
       setMyCases([]);
       setActivePosterIndex(0);
+      setActivePosterImageIndex(0);
       return;
     }
 
@@ -449,6 +500,7 @@ function UserDashboardModal({
         if (!enrichedCases.length) return 0;
         return Math.min(prev, enrichedCases.length - 1);
       });
+      setActivePosterImageIndex(0);
 
       setIsLoadingActivity(true);
       const events = await getUserActivityFromEvents(
@@ -470,6 +522,7 @@ function UserDashboardModal({
     if (!isOpen || !account) {
       setMyCases([]);
       setActivePosterIndex(0);
+      setActivePosterImageIndex(0);
       setChainActivity([]);
       return;
     }
@@ -482,6 +535,16 @@ function UserDashboardModal({
     return myCases[activePosterIndex] || myCases[0];
   }, [myCases, activePosterIndex]);
 
+  useEffect(() => {
+    setActivePosterImageIndex(0);
+  }, [activePosterIndex, activePoster?.id]);
+
+  const posterGallery = useMemo(
+    () => buildPosterGallery(activePoster?.metadata),
+    [activePoster]
+  );
+
+  const posterImage = posterGallery[activePosterImageIndex] || "";
   const isCorrectNetwork = chainId === ACTIVE_NETWORK.chainId;
 
   function appendActivity(entry) {
@@ -522,6 +585,22 @@ function UserDashboardModal({
   function handleNextPoster() {
     setActivePosterIndex((prev) => {
       if (prev === myCases.length - 1) return 0;
+      return prev + 1;
+    });
+  }
+
+  function handlePrevPosterImage() {
+    setActivePosterImageIndex((prev) => {
+      if (!posterGallery.length) return 0;
+      if (prev === 0) return posterGallery.length - 1;
+      return prev - 1;
+    });
+  }
+
+  function handleNextPosterImage() {
+    setActivePosterImageIndex((prev) => {
+      if (!posterGallery.length) return 0;
+      if (prev === posterGallery.length - 1) return 0;
       return prev + 1;
     });
   }
@@ -643,14 +722,13 @@ function UserDashboardModal({
     }
   }
 
-  if (!isOpen) return null;
+  function handleOpenCaseInReader(caseId) {
+    if (typeof onSelectCase === "function" && caseId !== undefined && caseId !== null) {
+      onSelectCase(caseId);
+    }
+  }
 
-  const posterImage = ipfsToHttp(
-    activePoster?.metadata?.posterImage ||
-      activePoster?.metadata?.image ||
-      activePoster?.metadata?.gallery?.[0] ||
-      ""
-  );
+  if (!isOpen) return null;
 
   return (
     <div
@@ -758,8 +836,8 @@ function UserDashboardModal({
 
               <p className="user-modal-panel-text">
                 {isOwnProfile
-                  ? "Aquí puedes revisar los casos creados con tu wallet y cambiar su estado."
-                  : "Aquí puedes revisar los casos publicados por esta wallet."}
+                  ? "Aquí puedes revisar los casos creados con tu wallet, cambiar su estado o abrir uno directamente en el lector principal."
+                  : "Aquí puedes revisar los casos publicados por esta wallet y abrir cualquiera directamente en el lector principal."}
               </p>
 
               {isLoadingCases ? (
@@ -795,19 +873,55 @@ function UserDashboardModal({
                   )}
 
                   <div className="user-poster-stage">
-                    <div className="user-poster-media">
-                      {posterImage ? (
-                        <img
-                          src={posterImage}
-                          alt={activePoster?.metadata?.name || `Caso ${activePoster?.id}`}
-                          className="user-poster-image"
-                        />
-                      ) : (
-                        <div className="user-poster-image-empty">
-                          Sin imagen disponible
-                        </div>
-                      )}
-                    </div>
+<div className="user-poster-media-shell">
+  <button
+    type="button"
+    className="user-poster-media user-poster-media-clickable"
+    onClick={() => handleOpenCaseInReader(activePoster?.id)}
+    title={`Abrir caso #${activePoster?.id} en el lector`}
+    aria-label={`Abrir caso ${activePoster?.id} en el lector`}
+  >
+    {posterImage ? (
+      <img
+        src={posterImage}
+        alt={activePoster?.metadata?.name || `Caso ${activePoster?.id}`}
+        className="user-poster-image"
+      />
+    ) : (
+      <div className="user-poster-image-empty">
+        Sin imagen disponible
+      </div>
+    )}
+  </button>
+
+  {posterGallery.length > 1 && (
+    <>
+      <button
+        type="button"
+        className="user-poster-overlay-nav user-poster-overlay-nav-left"
+        onClick={handlePrevPosterImage}
+        aria-label="Imagen anterior"
+        title="Imagen anterior"
+      >
+        <ChevronLeftIcon />
+      </button>
+
+      <button
+        type="button"
+        className="user-poster-overlay-nav user-poster-overlay-nav-right"
+        onClick={handleNextPosterImage}
+        aria-label="Imagen siguiente"
+        title="Imagen siguiente"
+      >
+        <ChevronRightIcon />
+      </button>
+
+      <div className="user-poster-overlay-counter">
+        {activePosterImageIndex + 1} / {posterGallery.length}
+      </div>
+    </>
+  )}
+</div>
 
                     <div className="user-poster-info">
                       <div className="user-poster-top">
@@ -861,9 +975,11 @@ function UserDashboardModal({
                           className="secondary-button user-poster-nav-button"
                           onClick={handlePrevPoster}
                           disabled={myCases.length <= 1}
+                          aria-label="Afiche anterior"
+                          title="Afiche anterior"
                         >
                           <ChevronLeftIcon />
-                          <span>Anterior</span>
+                          <span className="user-poster-nav-text">Anterior</span>
                         </button>
 
                         <span className="user-poster-counter">
@@ -875,9 +991,22 @@ function UserDashboardModal({
                           className="secondary-button user-poster-nav-button"
                           onClick={handleNextPoster}
                           disabled={myCases.length <= 1}
+                          aria-label="Afiche siguiente"
+                          title="Afiche siguiente"
                         >
-                          <span>Siguiente</span>
+                          <span className="user-poster-nav-text">Siguiente</span>
                           <ChevronRightIcon />
+                        </button>
+                      </div>
+
+                      <div className="user-poster-reader-actions">
+                        <button
+                          type="button"
+                          className="primary-button user-open-case-button"
+                          onClick={() => handleOpenCaseInReader(activePoster?.id)}
+                        >
+                          <OpenCaseIcon />
+                          <span>Leer caso completo</span>
                         </button>
                       </div>
 
