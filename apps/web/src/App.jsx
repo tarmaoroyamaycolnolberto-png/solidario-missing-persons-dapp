@@ -4,14 +4,15 @@ import CreateCaseForm from "./components/CreateCaseForm";
 import ReadCase from "./components/ReadCase";
 import ExploreCases from "./components/ExploreCases";
 import UserDashboardModal from "./components/UserDashboardModal";
-import { PROJECT_SUPPORT_WALLET } from "./config";
-import {
+import { API_BASE_URL } from "./config";  import {
+  
   getCurrentProvider,
   getWalletWeb3,
   resetWalletConnection,
   switchToActiveNetwork,
 } from "./web3";
 import "./App.css";
+
 
 function AccordionArrow({ isOpen }) {
   return (
@@ -129,6 +130,7 @@ function MoonIcon() {
 }
 
 function App() {
+  console.log("API_BASE_URL:", API_BASE_URL);
   const [account, setAccount] = useState("");
   const [message, setMessage] = useState("");
   const [selectedCaseId, setSelectedCaseId] = useState("");

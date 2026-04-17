@@ -1,3 +1,4 @@
+// 🌐 Red principal BNB Smart Chain
 export const BSC_MAINNET = {
   chainId: "0x38",
   chainIdDec: 56,
@@ -11,19 +12,29 @@ export const BSC_MAINNET = {
   blockExplorerUrls: ["https://bscscan.com/"],
 };
 
+// 🔗 Red activa
 export const ACTIVE_NETWORK = BSC_MAINNET;
 
+// 📄 Dirección del contrato desplegado
 export const CONTRACT_ADDRESS = "0x24dd35e91440c01e423efed842b04aab0607f0b8";
+
+// 💙 Wallet de apoyo al proyecto
 export const PROJECT_SUPPORT_WALLET = "0xBB80938b8E58a2B232A457082Dc7D72aDCC910f2";
 
-export const API_BASE_URL =
-  import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:4000";
+// 🌍 Backend API
+export const API_BASE_URL = (
+  import.meta.env.VITE_API_URL || "http://localhost:4000"
+).replace(/\/$/, "");
 
+// 📦 Gateways IPFS (ordenados por prioridad)
 export const IPFS_GATEWAYS = [
-  import.meta.env.VITE_IPFS_GATEWAY?.replace(/\/$/, ""),
+  import.meta.env.VITE_IPFS_GATEWAY,
   "https://gateway.pinata.cloud/ipfs",
-  "https://ipfs.io/ipfs",
   "https://cloudflare-ipfs.com/ipfs",
-].filter(Boolean);
+  "https://ipfs.io/ipfs",
+]
+  .filter(Boolean)
+  .map((url) => url.replace(/\/$/, ""));
 
+// 🎯 Gateway por defecto
 export const DEFAULT_IPFS_GATEWAY = IPFS_GATEWAYS[0];
