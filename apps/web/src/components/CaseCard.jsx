@@ -1,27 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { donateToCase, formatWeiToBNB } from "../services/contract";
+import { buildGalleryFromMetadata } from "../services/ipfs";
 import { ACTIVE_NETWORK } from "../config";
 import { getCurrentProvider, switchToActiveNetwork } from "../web3";
-
-function ipfsToHttp(value) {
-  if (!value) return "";
-  if (value.startsWith("ipfs://")) {
-    return `https://gateway.pinata.cloud/ipfs/${value.replace("ipfs://", "")}`;
-  }
-  return value;
-}
-
-function buildGallery(caseMetadata) {
-  const gallery = Array.isArray(caseMetadata?.gallery) ? caseMetadata.gallery : [];
-  const poster = caseMetadata?.posterImage || caseMetadata?.image;
-
-  const combined = [...gallery];
-  if (poster && !combined.includes(poster)) {
-    combined.unshift(poster);
-  }
-
-  return combined.map(ipfsToHttp).filter(Boolean);
-}
 
 function getExplorerBaseUrl() {
   return (
@@ -166,7 +147,10 @@ function CaseCard({
   const [chainId, setChainId] = useState("");
   const [isCheckingNetwork, setIsCheckingNetwork] = useState(false);
 
-  const galleryImages = useMemo(() => buildGallery(caseMetadata), [caseMetadata]);
+  const galleryImages = useMemo(
+    () => buildGalleryFromMetadata(caseMetadata),
+    [caseMetadata]
+  );
   const currentImage = galleryImages[activeImageIndex] || "";
 
   useEffect(() => {
@@ -196,7 +180,9 @@ function CaseCard({
   if (!readResult) return null;
 
   const totalDonatedBNB = formatWeiToBNB(readResult.totalDonated || "0");
-  const recipientUrl = readResult?.recipient ? buildAddressUrl(readResult.recipient) : "";
+  const recipientUrl = readResult?.recipient
+    ? buildAddressUrl(readResult.recipient)
+    : "";
 
   const isConnected = Boolean(account);
   const isCorrectNetwork = chainId === ACTIVE_NETWORK.chainId;
@@ -293,49 +279,47 @@ function CaseCard({
             ) : null}
           </div>
 
-{currentImage ? (
-  <div className="case-image-stage">
-    <div className="case-image-frame">
-      <img
-        className="case-image improved-case-image"
-        src={currentImage}
-        alt={caseMetadata?.name || "Afiche"}
-      />
-    </div>
+          {currentImage ? (
+            <div className="case-image-stage">
+              <div className="case-image-frame">
+                <img
+                  className="case-image improved-case-image"
+                  src={currentImage}
+                  alt={caseMetadata?.name || "Afiche"}
+                />
+              </div>
 
-    {galleryImages.length > 1 && (
-      <>
-        <button
-          type="button"
-          className="case-overlay-nav case-overlay-nav-left"
-          onClick={handlePrevImage}
-          aria-label="Imagen anterior"
-          title="Imagen anterior"
-        >
-          <ChevronLeftIcon />
-        </button>
+              {galleryImages.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    className="case-overlay-nav case-overlay-nav-left"
+                    onClick={handlePrevImage}
+                    aria-label="Imagen anterior"
+                    title="Imagen anterior"
+                  >
+                    <ChevronLeftIcon />
+                  </button>
 
-        <button
-          type="button"
-          className="case-overlay-nav case-overlay-nav-right"
-          onClick={handleNextImage}
-          aria-label="Imagen siguiente"
-          title="Imagen siguiente"
-        >
-          <ChevronRightIcon />
-        </button>
+                  <button
+                    type="button"
+                    className="case-overlay-nav case-overlay-nav-right"
+                    onClick={handleNextImage}
+                    aria-label="Imagen siguiente"
+                    title="Imagen siguiente"
+                  >
+                    <ChevronRightIcon />
+                  </button>
 
-        <div className="case-overlay-counter">
-          {activeImageIndex + 1} / {galleryImages.length}
-        </div>
-      </>
-    )}
-  </div>
-) : (
-  <div className="empty-image">
-    No hay imagen disponible para este caso
-  </div>
-)}
+                  <div className="case-overlay-counter">
+                    {activeImageIndex + 1} / {galleryImages.length}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="empty-image">No hay imagen disponible para este caso</div>
+          )}
         </div>
 
         <div className="case-content improved-case-content">

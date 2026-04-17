@@ -9,6 +9,10 @@ import {
   getPublicActivityByWallet,
   savePublicSocials,
 } from "../services/profile";
+import {
+  fetchJSONFromIPFS,
+  buildGalleryFromMetadata,
+} from "../services/ipfs";
 import { getCurrentProvider, switchToActiveNetwork } from "../web3";
 import { ACTIVE_NETWORK } from "../config";
 
@@ -208,11 +212,6 @@ function formatAddress(address) {
   return `${address.slice(0, 8)}...${address.slice(-6)}`;
 }
 
-function normalizeCID(value) {
-  if (!value) return "";
-  return String(value).replace("ipfs://", "").trim();
-}
-
 function createActivityEntry(type, detail, source = "local") {
   const now = new Date();
   return {
@@ -269,60 +268,6 @@ function buildSocialUrl(type, value) {
     default:
       return clean;
   }
-}
-
-async function fetchMetadataByCID(metadataCID) {
-  const cleanCID = normalizeCID(metadataCID);
-
-  if (!cleanCID) {
-    throw new Error("No existe un metadataCID válido");
-  }
-
-  const gateways = [
-    `https://gateway.pinata.cloud/ipfs/${cleanCID}`,
-    `https://ipfs.io/ipfs/${cleanCID}`,
-    `https://cloudflare-ipfs.com/ipfs/${cleanCID}`,
-  ];
-
-  let lastError = null;
-
-  for (const url of gateways) {
-    try {
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        throw new Error(`No se pudo obtener metadata desde ${url}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  throw new Error(lastError?.message || "No se pudo obtener metadata");
-}
-
-function ipfsToHttp(value) {
-  if (!value) return "";
-  if (value.startsWith("ipfs://")) {
-    return `https://gateway.pinata.cloud/ipfs/${value.replace("ipfs://", "")}`;
-  }
-  return value;
-}
-
-function buildPosterGallery(metadata) {
-  if (!metadata) return [];
-
-  const gallery = Array.isArray(metadata.gallery) ? metadata.gallery : [];
-  const poster = metadata.posterImage || metadata.image;
-
-  const combined = [...gallery];
-  if (poster && !combined.includes(poster)) {
-    combined.unshift(poster);
-  }
-
-  return combined.map(ipfsToHttp).filter(Boolean);
 }
 
 function getStatusLabel(status) {
@@ -478,7 +423,7 @@ function UserDashboardModal({
       const enrichedCases = await Promise.all(
         cases.map(async (item) => {
           try {
-            const metadata = await fetchMetadataByCID(item.metadataCID);
+            const metadata = await fetchJSONFromIPFS(item.metadataCID);
 
             return {
               ...item,
@@ -540,7 +485,7 @@ function UserDashboardModal({
   }, [activePosterIndex, activePoster?.id]);
 
   const posterGallery = useMemo(
-    () => buildPosterGallery(activePoster?.metadata),
+    () => buildGalleryFromMetadata(activePoster?.metadata),
     [activePoster]
   );
 
@@ -620,6 +565,7 @@ function UserDashboardModal({
 
     try {
       setIsSavingSocials(true);
+      setMessage("Confirma la firma en tu wallet para guardar las redes...");
 
       const normalized = {
         instagram: socials.instagram.trim(),
@@ -648,7 +594,7 @@ function UserDashboardModal({
       setMessage("Redes sociales guardadas correctamente");
     } catch (error) {
       console.error(error);
-      setMessage("No se pudieron guardar las redes sociales");
+      setMessage(error.message || "No se pudieron guardar las redes sociales");
     } finally {
       setIsSavingSocials(false);
     }
@@ -873,55 +819,55 @@ function UserDashboardModal({
                   )}
 
                   <div className="user-poster-stage">
-<div className="user-poster-media-shell">
-  <button
-    type="button"
-    className="user-poster-media user-poster-media-clickable"
-    onClick={() => handleOpenCaseInReader(activePoster?.id)}
-    title={`Abrir caso #${activePoster?.id} en el lector`}
-    aria-label={`Abrir caso ${activePoster?.id} en el lector`}
-  >
-    {posterImage ? (
-      <img
-        src={posterImage}
-        alt={activePoster?.metadata?.name || `Caso ${activePoster?.id}`}
-        className="user-poster-image"
-      />
-    ) : (
-      <div className="user-poster-image-empty">
-        Sin imagen disponible
-      </div>
-    )}
-  </button>
+                    <div className="user-poster-media-shell">
+                      <button
+                        type="button"
+                        className="user-poster-media user-poster-media-clickable"
+                        onClick={() => handleOpenCaseInReader(activePoster?.id)}
+                        title={`Abrir caso #${activePoster?.id} en el lector`}
+                        aria-label={`Abrir caso ${activePoster?.id} en el lector`}
+                      >
+                        {posterImage ? (
+                          <img
+                            src={posterImage}
+                            alt={activePoster?.metadata?.name || `Caso ${activePoster?.id}`}
+                            className="user-poster-image"
+                          />
+                        ) : (
+                          <div className="user-poster-image-empty">
+                            Sin imagen disponible
+                          </div>
+                        )}
+                      </button>
 
-  {posterGallery.length > 1 && (
-    <>
-      <button
-        type="button"
-        className="user-poster-overlay-nav user-poster-overlay-nav-left"
-        onClick={handlePrevPosterImage}
-        aria-label="Imagen anterior"
-        title="Imagen anterior"
-      >
-        <ChevronLeftIcon />
-      </button>
+                      {posterGallery.length > 1 && (
+                        <>
+                          <button
+                            type="button"
+                            className="user-poster-overlay-nav user-poster-overlay-nav-left"
+                            onClick={handlePrevPosterImage}
+                            aria-label="Imagen anterior"
+                            title="Imagen anterior"
+                          >
+                            <ChevronLeftIcon />
+                          </button>
 
-      <button
-        type="button"
-        className="user-poster-overlay-nav user-poster-overlay-nav-right"
-        onClick={handleNextPosterImage}
-        aria-label="Imagen siguiente"
-        title="Imagen siguiente"
-      >
-        <ChevronRightIcon />
-      </button>
+                          <button
+                            type="button"
+                            className="user-poster-overlay-nav user-poster-overlay-nav-right"
+                            onClick={handleNextPosterImage}
+                            aria-label="Imagen siguiente"
+                            title="Imagen siguiente"
+                          >
+                            <ChevronRightIcon />
+                          </button>
 
-      <div className="user-poster-overlay-counter">
-        {activePosterImageIndex + 1} / {posterGallery.length}
-      </div>
-    </>
-  )}
-</div>
+                          <div className="user-poster-overlay-counter">
+                            {activePosterImageIndex + 1} / {posterGallery.length}
+                          </div>
+                        </>
+                      )}
+                    </div>
 
                     <div className="user-poster-info">
                       <div className="user-poster-top">

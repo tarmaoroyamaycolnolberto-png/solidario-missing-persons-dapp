@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createCaseOnChain } from "../services/contract";
+import { uploadImageToBackend, uploadJSONToBackend } from "../services/ipfs";
 import { COUNTRIES } from "../data/countries";
 
 function WalletIcon() {
@@ -168,74 +169,6 @@ function CreateCaseForm({ account, setMessage }) {
     fileInputRef.current?.click();
   }
 
-  async function uploadImageToBackend(file) {
-    const formData = new FormData();
-    formData.append("file", file);
-
-    const res = await fetch("http://localhost:4000/api/pinata/upload-image", {
-      method: "POST",
-      body: formData,
-    });
-
-    let data = {};
-    try {
-      data = await res.json();
-    } catch {
-      throw new Error(
-        "El servidor no devolvió una respuesta JSON válida al subir la imagen"
-      );
-    }
-
-    if (!res.ok) {
-      throw new Error(
-        data.error ||
-          data.details?.error ||
-          data.details?.message ||
-          "Error subiendo imagen al servidor"
-      );
-    }
-
-    if (!data.cid) {
-      throw new Error("El servidor no devolvió un CID válido para la imagen");
-    }
-
-    return data.cid;
-  }
-
-  async function uploadJSONToBackend(jsonData) {
-    const res = await fetch("http://localhost:4000/api/pinata/upload-json", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(jsonData),
-    });
-
-    let data = {};
-    try {
-      data = await res.json();
-    } catch {
-      throw new Error(
-        "El servidor no devolvió una respuesta JSON válida al subir la metadata"
-      );
-    }
-
-    if (!res.ok) {
-      throw new Error(
-        data.error ||
-          data.details?.error ||
-          data.details?.message ||
-          "Error subiendo metadata al servidor"
-      );
-    }
-
-    if (!data.cid) {
-      throw new Error("El servidor no devolvió un CID válido para la metadata");
-    }
-
-    return data.cid;
-  }
-
   async function handleCreateCase() {
     if (isSubmitting) return;
 
@@ -248,7 +181,12 @@ function CreateCaseForm({ account, setMessage }) {
       if (!city.trim()) throw new Error("Ingresa la ciudad o distrito");
 
       const numericAge = Number(age);
-      if (age === "" || Number.isNaN(numericAge) || numericAge < 0 || numericAge > 120) {
+      if (
+        age === "" ||
+        Number.isNaN(numericAge) ||
+        numericAge < 0 ||
+        numericAge > 120
+      ) {
         throw new Error("Ingresa una edad válida");
       }
 

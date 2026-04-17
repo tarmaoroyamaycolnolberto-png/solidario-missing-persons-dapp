@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getCaseById } from "../services/contract";
+import { fetchJSONFromIPFS } from "../services/ipfs";
 import CaseCard from "./CaseCard";
 
 function extractMetadataCID(data) {
@@ -14,11 +15,6 @@ function extractMetadataCID(data) {
   }
 
   return "";
-}
-
-function normalizeCID(value) {
-  if (!value) return "";
-  return String(value).replace("ipfs://", "").trim();
 }
 
 function SearchIcon() {
@@ -67,40 +63,6 @@ function ReadCase({
     }
   }, [selectedCaseId]);
 
-  async function fetchMetadataByCID(metadataCID) {
-    const cleanCID = normalizeCID(metadataCID);
-
-    if (!cleanCID) {
-      throw new Error("No existe un metadataCID válido");
-    }
-
-    const gateways = [
-      `https://ipfs.io/ipfs/${cleanCID}`,
-      `https://cloudflare-ipfs.com/ipfs/${cleanCID}`,
-      `https://gateway.pinata.cloud/ipfs/${cleanCID}`,
-    ];
-
-    let lastError = null;
-
-    for (const url of gateways) {
-      try {
-        const response = await fetch(url);
-
-        if (!response.ok) {
-          throw new Error(`No se pudo obtener la metadata desde ${url}`);
-        }
-
-        return await response.json();
-      } catch (error) {
-        lastError = error;
-      }
-    }
-
-    throw new Error(
-      lastError?.message || "No se pudo obtener la metadata desde IPFS"
-    );
-  }
-
   async function handleReadCase(customCaseId) {
     if (isLoading) return;
 
@@ -142,7 +104,7 @@ function ReadCase({
       }
 
       setMessage("Descargando metadata desde IPFS...");
-      const metadata = await fetchMetadataByCID(metadataCID);
+      const metadata = await fetchJSONFromIPFS(metadataCID);
 
       setCaseId(String(numericId));
       setReadResult(data);

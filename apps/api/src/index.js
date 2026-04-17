@@ -4,11 +4,15 @@ import dotenv from "dotenv";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
+import Web3 from "web3";
 import { fileURLToPath } from "url";
 
 dotenv.config();
 
 const app = express();
+const serverWeb3 = new Web3();
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -21,6 +25,9 @@ const __dirname = path.dirname(__filename);
 
 const DATA_DIR = path.join(__dirname, "../data");
 const PROFILES_FILE = path.join(DATA_DIR, "profiles.json");
+
+const PROFILE_AUTH_TTL_MS = 5 * 60 * 1000;
+const profileAuthChallenges = new Map();
 
 function ensureProfilesStorage() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -84,6 +91,26 @@ function createPublicActivity(type, detail) {
   };
 }
 
+function buildProfileSocialsMessage(wallet, nonce) {
+  return [
+    "Solidario - Actualización de perfil público",
+    `Wallet: ${wallet}`,
+    `Nonce: ${nonce}`,
+    "Acción: guardar redes sociales públicas",
+    "Este mensaje no ejecuta transacciones ni consume gas.",
+  ].join("\n");
+}
+
+function cleanupExpiredProfileChallenges() {
+  const now = Date.now();
+
+  for (const [wallet, challenge] of profileAuthChallenges.entries()) {
+    if (!challenge?.expiresAt || challenge.expiresAt <= now) {
+      profileAuthChallenges.delete(wallet);
+    }
+  }
+}
+
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 
@@ -126,8 +153,10 @@ app.get("/api/profile/:wallet", (req, res) => {
   }
 });
 
-app.post("/api/profile/:wallet/socials", async (req, res) => {
+app.get("/api/profile/:wallet/auth-message", (req, res) => {
   try {
+    cleanupExpiredProfileChallenges();
+
     const wallet = normalizeWallet(req.params.wallet);
 
     if (!wallet) {
@@ -136,6 +165,98 @@ app.post("/api/profile/:wallet/socials", async (req, res) => {
         error: "Wallet inválida",
       });
     }
+
+    const nonce = crypto.randomBytes(16).toString("hex");
+    const expiresAt = Date.now() + PROFILE_AUTH_TTL_MS;
+    const message = buildProfileSocialsMessage(wallet, nonce);
+
+    profileAuthChallenges.set(wallet, {
+      nonce,
+      expiresAt,
+    });
+
+    return res.json({
+      ok: true,
+      wallet,
+      nonce,
+      message,
+      expiresAt,
+    });
+  } catch (error) {
+    console.error("Error en GET /api/profile/:wallet/auth-message:", error);
+
+    return res.status(500).json({
+      ok: false,
+      error: "No se pudo generar el reto de firma",
+      details: error.message,
+    });
+  }
+});
+
+app.post("/api/profile/:wallet/socials", async (req, res) => {
+  try {
+    cleanupExpiredProfileChallenges();
+
+    const wallet = normalizeWallet(req.params.wallet);
+
+    if (!wallet) {
+      return res.status(400).json({
+        ok: false,
+        error: "Wallet inválida",
+      });
+    }
+
+    const signature = String(req.body?.signature || "").trim();
+    const nonce = String(req.body?.nonce || "").trim();
+
+    if (!signature || !nonce) {
+      return res.status(401).json({
+        ok: false,
+        error: "Falta la firma o el nonce de autenticación",
+      });
+    }
+
+    const storedChallenge = profileAuthChallenges.get(wallet);
+
+    if (!storedChallenge || storedChallenge.nonce !== nonce) {
+      return res.status(401).json({
+        ok: false,
+        error: "Nonce inválido o inexistente",
+      });
+    }
+
+    if (storedChallenge.expiresAt <= Date.now()) {
+      profileAuthChallenges.delete(wallet);
+
+      return res.status(401).json({
+        ok: false,
+        error: "La firma expiró. Solicita una nueva.",
+      });
+    }
+
+    const message = buildProfileSocialsMessage(wallet, nonce);
+
+    let recoveredWallet = "";
+    try {
+      recoveredWallet = normalizeWallet(
+        serverWeb3.eth.accounts.recover(message, signature)
+      );
+    } catch (error) {
+      return res.status(401).json({
+        ok: false,
+        error: "No se pudo verificar la firma",
+        details: error.message,
+      });
+    }
+
+    if (recoveredWallet !== wallet) {
+      return res.status(403).json({
+        ok: false,
+        error: "La firma no pertenece a la wallet del perfil",
+      });
+    }
+
+    profileAuthChallenges.delete(wallet);
 
     const socials = {
       instagram: String(req.body?.instagram || "").trim(),

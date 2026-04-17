@@ -1,13 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { getCaseById, getNextCaseId } from "../services/contract";
+import { fetchJSONFromIPFS, ipfsToHttp } from "../services/ipfs";
 import { COUNTRIES } from "../data/countries";
 
 const CASES_PER_PAGE = 6;
-
-function normalizeCID(value) {
-  if (!value) return "";
-  return String(value).replace("ipfs://", "").trim();
-}
 
 function extractMetadataCID(data) {
   if (!data) return "";
@@ -21,14 +17,6 @@ function extractMetadataCID(data) {
   }
 
   return "";
-}
-
-function ipfsToHttp(value) {
-  if (!value) return "";
-  if (value.startsWith("ipfs://")) {
-    return `https://ipfs.io/ipfs/${value.replace("ipfs://", "")}`;
-  }
-  return value;
 }
 
 function getCaseStatusLabel(status) {
@@ -181,40 +169,6 @@ function ExploreCases({ setMessage, onSelectCase }) {
   const [endDate, setEndDate] = useState("");
   const [currentPage, setCurrentPage] = useState(0);
 
-  async function fetchMetadataByCID(metadataCID) {
-    const cleanCID = normalizeCID(metadataCID);
-
-    if (!cleanCID) {
-      throw new Error("No existe un metadataCID válido");
-    }
-
-    const gateways = [
-      `https://ipfs.io/ipfs/${cleanCID}`,
-      `https://cloudflare-ipfs.com/ipfs/${cleanCID}`,
-      `https://gateway.pinata.cloud/ipfs/${cleanCID}`,
-    ];
-
-    let lastError = null;
-
-    for (const url of gateways) {
-      try {
-        const response = await fetch(url);
-
-        if (!response.ok) {
-          throw new Error(`No se pudo obtener la metadata desde ${url}`);
-        }
-
-        return await response.json();
-      } catch (error) {
-        lastError = error;
-      }
-    }
-
-    throw new Error(
-      lastError?.message || "No se pudo obtener la metadata desde IPFS"
-    );
-  }
-
   async function loadCases() {
     try {
       setIsLoading(true);
@@ -232,7 +186,7 @@ function ExploreCases({ setMessage, onSelectCase }) {
           const metadataCID = extractMetadataCID(onChainData);
           if (!metadataCID) continue;
 
-          const metadata = await fetchMetadataByCID(metadataCID);
+          const metadata = await fetchJSONFromIPFS(metadataCID);
 
           loadedCases.push({
             id: Number(onChainData.id ?? onChainData[0] ?? i),
@@ -335,7 +289,11 @@ function ExploreCases({ setMessage, onSelectCase }) {
       const id = String(item.id || "");
       const caseCountryCode = String(item.metadata?.countryCode || "");
       const caseAge = item.metadata?.age;
-      const caseDate = item.metadata?.lastSeenDate || item.metadata?.date || "";
+      const caseDate =
+        item.metadata?.lastSeenDate ||
+        item.metadata?.missingDate ||
+        item.metadata?.date ||
+        "";
 
       const matchesText =
         !q ||
