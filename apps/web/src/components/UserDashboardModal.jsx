@@ -225,15 +225,13 @@ function createActivityEntry(type, detail, source = "local") {
 }
 
 function buildExplorerBaseUrl() {
-  return (
-    ACTIVE_NETWORK?.blockExplorerUrls?.[0]?.replace(/\/$/, "") ||
-    "https://bscscan.com"
-  );
+  // Forzamos BSCSCAN MAINNET directamente (más seguro)
+  return "https://bscscan.com";
 }
 
 function buildTxUrl(txHash) {
   if (!txHash) return "";
-  return `${buildExplorerBaseUrl()}/tx/${txHash}`;
+  return `https://bscscan.com/tx/${txHash}`;
 }
 
 function buildSocialUrl(type, value) {
@@ -1191,4 +1189,4 @@ function UserDashboardModal({
   );
 }
 
-export default UserDashboardModal;
+export default UserDashboardModal;    
