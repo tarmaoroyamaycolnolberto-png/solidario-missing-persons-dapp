@@ -113,16 +113,25 @@ function cleanupExpiredProfileChallenges() {
 
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "https://solidario-missing-persons-dapp.vercel.app",
-      "https://solidario-missing-persons-dapp-oxudk7o1f-aura656s-projects.vercel.app/"
-      
-    ],
+    origin: (origin, callback) => {
+      const allowedOrigins = [
+        "http://localhost:5173",
+        "https://solidario-missing-persons-dapp.vercel.app",
+        "https://solidario-missing-persons-dapp-oxudk7o1f-aura656s-projects.vercel.app",
+      ];
+
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("No permitido por CORS: " + origin));
+      }
+    },
     methods: ["GET", "POST"],
     allowedHeaders: ["Content-Type"],
   })
-);app.use(express.json({ limit: "10mb" }));
+);
+
+app.use(express.json({ limit: "10mb" }));
 
 app.get("/", (req, res) => {
   res.json({ message: "API Missing Global funcionando" });
