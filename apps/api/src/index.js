@@ -7,6 +7,8 @@ import path from "path";
 import crypto from "crypto";
 import Web3 from "web3";
 import { fileURLToPath } from "url";
+import FormData from "form-data";
+import fetch from "node-fetch";
 
 dotenv.config();
 
@@ -15,9 +17,7 @@ const serverWeb3 = new Web3();
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 10 * 1024 * 1024,
-  },
+  limits: { fileSize: 10 * 1024 * 1024 },
 });
 
 const __filename = fileURLToPath(import.meta.url);
@@ -29,11 +29,14 @@ const PROFILES_FILE = path.join(DATA_DIR, "profiles.json");
 const PROFILE_AUTH_TTL_MS = 5 * 60 * 1000;
 const profileAuthChallenges = new Map();
 
+/* =========================
+   UTILIDADES
+========================= */
+
 function ensureProfilesStorage() {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
-
   if (!fs.existsSync(PROFILES_FILE)) {
     fs.writeFileSync(PROFILES_FILE, JSON.stringify({}, null, 2), "utf-8");
   }
@@ -45,13 +48,11 @@ function normalizeWallet(value) {
 
 function readProfiles() {
   ensureProfilesStorage();
-
   try {
     const raw = fs.readFileSync(PROFILES_FILE, "utf-8");
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch (error) {
-    console.error("Error leyendo profiles.json:", error);
+    return JSON.parse(raw) || {};
+  } catch (err) {
+    console.error("❌ Error leyendo profiles:", err);
     return {};
   }
 }
@@ -78,20 +79,16 @@ function ensureProfileShape(profile = {}, wallet = "") {
 
 function createPublicActivity(type, detail) {
   const now = new Date();
-
   return {
-    id: `public-${type}-${now.getTime()}-${Math.random()
-      .toString(36)
-      .slice(2, 8)}`,
+    id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     type,
     detail,
-    source: "public_profile",
     timestamp: now.toISOString(),
     timestampLabel: now.toLocaleString(),
   };
 }
 
-function buildProfileSocialsMessage(wallet, nonce) {
+function buildMessage(wallet, nonce) {
   return [
     "Solidario - Actualización de perfil público",
     `Wallet: ${wallet}`,
@@ -101,252 +98,175 @@ function buildProfileSocialsMessage(wallet, nonce) {
   ].join("\n");
 }
 
-function cleanupExpiredProfileChallenges() {
+function cleanupChallenges() {
   const now = Date.now();
-
-  for (const [wallet, challenge] of profileAuthChallenges.entries()) {
-    if (!challenge?.expiresAt || challenge.expiresAt <= now) {
+  for (const [wallet, data] of profileAuthChallenges.entries()) {
+    if (data.expiresAt <= now) {
       profileAuthChallenges.delete(wallet);
     }
   }
 }
 
+/* =========================
+   CORS (FIX)
+========================= */
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      const allowedOrigins = [
+      const allowed = [
         "http://localhost:5173",
         "https://solidario-missing-persons-dapp.vercel.app",
-        "https://solidario-missing-persons-dapp-oxudk7o1f-aura656s-projects.vercel.app",
+        "https://solidario-missing-persons-dapp.onrender.com",
       ];
 
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || allowed.includes(origin)) {
         callback(null, true);
       } else {
-        callback(new Error("No permitido por CORS: " + origin));
+        console.log("❌ CORS bloqueado:", origin);
+        callback(new Error("No permitido por CORS"));
       }
     },
-    methods: ["GET", "POST"],
-    allowedHeaders: ["Content-Type"],
   })
 );
 
 app.use(express.json({ limit: "10mb" }));
 
+/* =========================
+   HEALTH
+========================= */
+
 app.get("/", (req, res) => {
-  res.json({ message: "API Missing Global funcionando" });
+  res.json({ ok: true, message: "API funcionando" });
 });
 
 app.get("/health", (req, res) => {
   res.json({ ok: true });
 });
 
+/* =========================
+   PROFILE GET
+========================= */
+
 app.get("/api/profile/:wallet", (req, res) => {
   try {
     const wallet = normalizeWallet(req.params.wallet);
-
-    if (!wallet) {
-      return res.status(400).json({
-        ok: false,
-        error: "Wallet inválida",
-      });
-    }
+    if (!wallet) throw new Error("Wallet inválida");
 
     const profiles = readProfiles();
     const profile = profiles[wallet]
       ? ensureProfileShape(profiles[wallet], wallet)
       : null;
 
-    return res.json({
-      ok: true,
-      profile,
-    });
-  } catch (error) {
-    console.error("Error en GET /api/profile/:wallet:", error);
-
-    return res.status(500).json({
-      ok: false,
-      error: "Error interno al obtener perfil",
-      details: error.message,
-    });
+    res.json({ ok: true, profile });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
+
+/* =========================
+   AUTH MESSAGE
+========================= */
 
 app.get("/api/profile/:wallet/auth-message", (req, res) => {
   try {
-    cleanupExpiredProfileChallenges();
+    cleanupChallenges();
 
     const wallet = normalizeWallet(req.params.wallet);
-
-    if (!wallet) {
-      return res.status(400).json({
-        ok: false,
-        error: "Wallet inválida",
-      });
-    }
+    if (!wallet) throw new Error("Wallet inválida");
 
     const nonce = crypto.randomBytes(16).toString("hex");
     const expiresAt = Date.now() + PROFILE_AUTH_TTL_MS;
-    const message = buildProfileSocialsMessage(wallet, nonce);
+    const message = buildMessage(wallet, nonce);
 
-    profileAuthChallenges.set(wallet, {
-      nonce,
-      expiresAt,
-    });
+    profileAuthChallenges.set(wallet, { nonce, expiresAt });
 
-    return res.json({
-      ok: true,
-      wallet,
-      nonce,
-      message,
-      expiresAt,
-    });
-  } catch (error) {
-    console.error("Error en GET /api/profile/:wallet/auth-message:", error);
-
-    return res.status(500).json({
-      ok: false,
-      error: "No se pudo generar el reto de firma",
-      details: error.message,
-    });
+    res.json({ ok: true, wallet, nonce, message, expiresAt });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
+/* =========================
+   SAVE SOCIALS (FIRMA)
+========================= */
+
 app.post("/api/profile/:wallet/socials", async (req, res) => {
   try {
-    cleanupExpiredProfileChallenges();
+    cleanupChallenges();
 
     const wallet = normalizeWallet(req.params.wallet);
+    const { signature, nonce } = req.body;
 
-    if (!wallet) {
-      return res.status(400).json({
-        ok: false,
-        error: "Wallet inválida",
-      });
+    if (!wallet || !signature || !nonce) {
+      return res.status(400).json({ ok: false, error: "Datos incompletos" });
     }
 
-    const signature = String(req.body?.signature || "").trim();
-    const nonce = String(req.body?.nonce || "").trim();
-
-    if (!signature || !nonce) {
-      return res.status(401).json({
-        ok: false,
-        error: "Falta la firma o el nonce de autenticación",
-      });
+    const challenge = profileAuthChallenges.get(wallet);
+    if (!challenge || challenge.nonce !== nonce) {
+      return res.status(401).json({ ok: false, error: "Nonce inválido" });
     }
 
-    const storedChallenge = profileAuthChallenges.get(wallet);
-
-    if (!storedChallenge || storedChallenge.nonce !== nonce) {
-      return res.status(401).json({
-        ok: false,
-        error: "Nonce inválido o inexistente",
-      });
-    }
-
-    if (storedChallenge.expiresAt <= Date.now()) {
+    if (challenge.expiresAt < Date.now()) {
       profileAuthChallenges.delete(wallet);
-
-      return res.status(401).json({
-        ok: false,
-        error: "La firma expiró. Solicita una nueva.",
-      });
+      return res.status(401).json({ ok: false, error: "Expirado" });
     }
 
-    const message = buildProfileSocialsMessage(wallet, nonce);
+    const message = buildMessage(wallet, nonce);
 
-    let recoveredWallet = "";
-    try {
-      recoveredWallet = normalizeWallet(
-        serverWeb3.eth.accounts.recover(message, signature)
-      );
-    } catch (error) {
-      return res.status(401).json({
-        ok: false,
-        error: "No se pudo verificar la firma",
-        details: error.message,
-      });
-    }
+    const recovered = normalizeWallet(
+      serverWeb3.eth.accounts.recover(message, signature)
+    );
 
-    if (recoveredWallet !== wallet) {
-      return res.status(403).json({
-        ok: false,
-        error: "La firma no pertenece a la wallet del perfil",
-      });
+    if (recovered !== wallet) {
+      return res.status(403).json({ ok: false, error: "Firma inválida" });
     }
 
     profileAuthChallenges.delete(wallet);
 
-    const socials = {
-      instagram: String(req.body?.instagram || "").trim(),
-      facebook: String(req.body?.facebook || "").trim(),
-      twitter: String(req.body?.twitter || "").trim(),
-      telegram: String(req.body?.telegram || "").trim(),
-      tiktok: String(req.body?.tiktok || "").trim(),
-    };
-
     const profiles = readProfiles();
-    const current = ensureProfileShape(profiles[wallet] || {}, wallet);
-
-    const nextActivity = [
-      createPublicActivity(
-        "Redes sociales actualizadas",
-        "El usuario actualizó sus redes sociales públicas"
-      ),
-      ...current.activity,
-    ];
+    const current = ensureProfileShape(profiles[wallet], wallet);
 
     profiles[wallet] = {
       ...current,
-      wallet,
-      socials,
-      activity: nextActivity,
+      socials: req.body.socials || current.socials,
+      activity: [
+        createPublicActivity("socials", "Redes actualizadas"),
+        ...current.activity,
+      ],
       updatedAt: new Date().toISOString(),
     };
 
     writeProfiles(profiles);
 
-    return res.json({
-      ok: true,
-      profile: profiles[wallet],
-    });
-  } catch (error) {
-    console.error("Error en POST /api/profile/:wallet/socials:", error);
-
-    return res.status(500).json({
-      ok: false,
-      error: "Error interno al guardar redes sociales",
-      details: error.message,
-    });
+    res.json({ ok: true, profile: profiles[wallet] });
+  } catch (err) {
+    console.error("🔥 ERROR socials:", err);
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
+
+/* =========================
+   PINATA IMAGE (FIX NODE)
+========================= */
 
 app.post("/api/pinata/upload-image", upload.single("file"), async (req, res) => {
   try {
     if (!process.env.PINATA_JWT) {
-      return res.status(500).json({
-        error: "Falta configurar PINATA_JWT en el archivo .env",
-      });
+      throw new Error("Falta PINATA_JWT");
     }
 
     if (!req.file) {
-      return res.status(400).json({
-        error: "No se recibió ninguna imagen",
-      });
-    }
-
-    if (!req.file.mimetype?.startsWith("image/")) {
-      return res.status(400).json({
-        error: "El archivo enviado no es una imagen válida",
-      });
+      throw new Error("No hay archivo");
     }
 
     const formData = new FormData();
-    const blob = new Blob([req.file.buffer], { type: req.file.mimetype });
+    formData.append("file", req.file.buffer, {
+      filename: req.file.originalname,
+      contentType: req.file.mimetype,
+    });
 
-    formData.append("file", blob, req.file.originalname);
-
-    const pinataRes = await fetch(
+    const response = await fetch(
       "https://api.pinata.cloud/pinning/pinFileToIPFS",
       {
         method: "POST",
@@ -357,44 +277,22 @@ app.post("/api/pinata/upload-image", upload.single("file"), async (req, res) => 
       }
     );
 
-    const data = await pinataRes.json();
+    const data = await response.json();
 
-    if (!pinataRes.ok) {
-      return res.status(pinataRes.status).json({
-        error: "Pinata devolvió un error al subir la imagen",
-        details: data,
-      });
-    }
-
-    return res.json({
-      ok: true,
-      cid: data.IpfsHash,
-    });
-  } catch (error) {
-    console.error("Error en /api/pinata/upload-image:", error);
-
-    return res.status(500).json({
-      error: "Error interno al subir imagen",
-      details: error.message,
-    });
+    res.json({ ok: true, cid: data.IpfsHash });
+  } catch (err) {
+    console.error("🔥 Pinata image:", err);
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
+/* =========================
+   PINATA JSON
+========================= */
+
 app.post("/api/pinata/upload-json", async (req, res) => {
   try {
-    if (!process.env.PINATA_JWT) {
-      return res.status(500).json({
-        error: "Falta configurar PINATA_JWT en el archivo .env",
-      });
-    }
-
-    if (!req.body || Object.keys(req.body).length === 0) {
-      return res.status(400).json({
-        error: "No se recibió metadata JSON",
-      });
-    }
-
-    const pinataRes = await fetch(
+    const response = await fetch(
       "https://api.pinata.cloud/pinning/pinJSONToIPFS",
       {
         method: "POST",
@@ -406,31 +304,30 @@ app.post("/api/pinata/upload-json", async (req, res) => {
       }
     );
 
-    const data = await pinataRes.json();
+    const data = await response.json();
 
-    if (!pinataRes.ok) {
-      return res.status(pinataRes.status).json({
-        error: "Pinata devolvió un error al subir la metadata",
-        details: data,
-      });
-    }
-
-    return res.json({
-      ok: true,
-      cid: data.IpfsHash,
-    });
-  } catch (error) {
-    console.error("Error en /api/pinata/upload-json:", error);
-
-    return res.status(500).json({
-      error: "Error interno al subir metadata",
-      details: error.message,
-    });
+    res.json({ ok: true, cid: data.IpfsHash });
+  } catch (err) {
+    console.error("🔥 Pinata JSON:", err);
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
+
+/* =========================
+   ERROR GLOBAL
+========================= */
+
+app.use((err, req, res, next) => {
+  console.error("🔥 ERROR GLOBAL:", err.message);
+  res.status(500).json({ ok: false, error: err.message });
+});
+
+/* =========================
+   START SERVER
+========================= */
 
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {
-  console.log(`Servidor corriendo en http://localhost:${PORT}`);
+  console.log(`🚀 Server listo en http://localhost:${PORT}`);
 });
