@@ -342,7 +342,7 @@ function CreateCaseForm({ account, setMessage }) {
               <input
                 className="form-input compact-input"
                 type="text"
-                placeholder="Teléfono, correo o referencia"
+                placeholder="Teléfono, correo o red social."
                 value={contact}
                 onChange={(e) => setContact(e.target.value)}
                 disabled={isSubmitting}
