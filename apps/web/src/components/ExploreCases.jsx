@@ -1,21 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { getCaseById, getNextCaseId } from "../services/contract";
 import { fetchJSONFromIPFS, ipfsToHttp } from "../services/ipfs";
-import { COUNTRIES } from "../data/countries";
+import { COUNTRIES, getStatesByCountry, getCitiesByState } from "../data/worldData";
 
 const CASES_PER_PAGE = 6;
 
+// ─── helpers ──────────────────────────────────────────────────────────────────
+
 function extractMetadataCID(data) {
   if (!data) return "";
-
-  if (typeof data.metadataCID === "string" && data.metadataCID.trim()) {
+  if (typeof data.metadataCID === "string" && data.metadataCID.trim())
     return data.metadataCID.trim();
-  }
-
-  if (typeof data[2] === "string" && data[2].trim()) {
-    return data[2].trim();
-  }
-
+  if (typeof data[2] === "string" && data[2].trim()) return data[2].trim();
   return "";
 }
 
@@ -27,158 +23,157 @@ function getCaseStatusClass(status) {
   return Number(status) === 1 ? "found" : "missing";
 }
 
+// ─── icons ────────────────────────────────────────────────────────────────────
+
 function SearchIcon() {
   return (
-    <svg
-      className="explore-search-icon"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
+    <svg className="explore-search-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none">
       <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
-      <path
-        d="M20 20L16.65 16.65"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
+      <path d="M20 20L16.65 16.65" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }
 
 function ChevronLeftIcon() {
   return (
-    <svg
-      className="explore-nav-icon"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path
-        d="M15 18L9 12L15 6"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+    <svg className="explore-nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none">
+      <path d="M15 18L9 12L15 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
 function ChevronRightIcon() {
   return (
-    <svg
-      className="explore-nav-icon"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path
-        d="M9 18L15 12L9 6"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+    <svg className="explore-nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none">
+      <path d="M9 18L15 12L9 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
 function FilterIcon() {
   return (
-    <svg
-      className="explore-section-icon"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path
-        d="M4 6H20"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M7 12H17"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M10 18H14"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
+    <svg className="explore-section-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none">
+      <path d="M4 6H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M7 12H17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M10 18H14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function MapPinIcon() {
+  return (
+    <svg className="explore-card-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none">
+      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+      <circle cx="12" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.8"/>
     </svg>
   );
 }
 
 function CalendarIcon() {
   return (
-    <svg
-      className="explore-input-icon"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <rect
-        x="4"
-        y="5"
-        width="16"
-        height="15"
-        rx="2"
-        stroke="currentColor"
-        strokeWidth="2"
-      />
-      <path
-        d="M8 3V7"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M16 3V7"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M4 10H20"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
+    <svg className="explore-card-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none">
+      <rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.8"/>
+      <path d="M16 2v4M8 2v4M3 10h18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
     </svg>
   );
 }
 
-function ExploreCases({ setMessage, onSelectCase }) {
-  const [allCases, setAllCases] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [searchText, setSearchText] = useState("");
-  const [appliedSearch, setAppliedSearch] = useState("");
-  const [selectedCountry, setSelectedCountry] = useState("");
-  const [selectedAgeRange, setSelectedAgeRange] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [currentPage, setCurrentPage] = useState(0);
+function PersonIcon() {
+  return (
+    <svg className="explore-card-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none">
+      <circle cx="12" cy="7" r="4" stroke="currentColor" strokeWidth="1.8"/>
+      <path d="M4 21c0-4.418 3.582-8 8-8s8 3.582 8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+    </svg>
+  );
+}
 
+// ─── sorted countries list from worldData ─────────────────────────────────────
+
+const SORTED_COUNTRIES = [...COUNTRIES].sort((a, b) =>
+  a.name.localeCompare(b.name)
+);
+
+// ─── age range matcher ────────────────────────────────────────────────────────
+
+function matchesAgeRange(ageValue, range) {
+  const age = Number(ageValue);
+  if (!range) return true;
+  if (Number.isNaN(age)) return false;
+  switch (range) {
+    case "0-12":  return age >= 0  && age <= 12;
+    case "13-17": return age >= 13 && age <= 17;
+    case "18-30": return age >= 18 && age <= 30;
+    case "31-59": return age >= 31 && age <= 59;
+    case "60+":   return age >= 60;
+    default:      return true;
+  }
+}
+
+function matchesDateInterval(caseDateValue, fromDate, toDate) {
+  if (!fromDate && !toDate) return true;
+  if (!caseDateValue) return false;
+  const caseDate = new Date(caseDateValue);
+  if (Number.isNaN(caseDate.getTime())) return false;
+  if (fromDate && caseDate < new Date(fromDate)) return false;
+  if (toDate) {
+    const to = new Date(toDate);
+    to.setHours(23, 59, 59, 999);
+    if (caseDate > to) return false;
+  }
+  return true;
+}
+
+// ─── component ────────────────────────────────────────────────────────────────
+
+function ExploreCases({ setMessage, onSelectCase }) {
+  const [allCases, setAllCases]               = useState([]);
+  const [isLoading, setIsLoading]             = useState(false);
+  const [searchText, setSearchText]           = useState("");
+  const [appliedSearch, setAppliedSearch]     = useState("");
+  const [selectedCountry, setSelectedCountry] = useState("");
+  const [selectedState, setSelectedState]     = useState("");
+  const [selectedCity, setSelectedCity]       = useState("");
+  const [selectedAgeRange, setSelectedAgeRange] = useState("");
+  const [startDate, setStartDate]             = useState("");
+  const [endDate, setEndDate]                 = useState("");
+  const [currentPage, setCurrentPage]         = useState(0);
+
+  // ── cascading lists ──────────────────────────────────────────────────────────
+  const stateList = useMemo(
+    () => (selectedCountry ? getStatesByCountry(selectedCountry) : []),
+    [selectedCountry]
+  );
+
+  const cityList = useMemo(
+    () => {
+      if (!selectedCountry || !selectedState) return [];
+      const stateId = Number(selectedState);
+      return getCitiesByState(selectedCountry, stateId);
+    },
+    [selectedCountry, selectedState]
+  );
+
+  // ── reset cascades ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    setSelectedState("");
+    setSelectedCity("");
+  }, [selectedCountry]);
+
+  useEffect(() => {
+    setSelectedCity("");
+  }, [selectedState]);
+
+  // ── load cases ───────────────────────────────────────────────────────────────
   async function loadCases() {
     try {
       setIsLoading(true);
       setMessage("Cargando afiches desde blockchain...");
 
-      const nextCaseId = await getNextCaseId();
-      const totalCases = Number(nextCaseId);
-      const loadedCases = [];
+      const nextCaseId   = await getNextCaseId();
+      const totalCases   = Number(nextCaseId);
+      const loadedCases  = [];
 
-      for (let i = 0; i < totalCases; i += 1) {
+      for (let i = 0; i < totalCases; i++) {
         try {
           const onChainData = await getCaseById(i);
           if (!onChainData) continue;
@@ -189,11 +184,11 @@ function ExploreCases({ setMessage, onSelectCase }) {
           const metadata = await fetchJSONFromIPFS(metadataCID);
 
           loadedCases.push({
-            id: Number(onChainData.id ?? onChainData[0] ?? i),
-            recipient: onChainData.recipient || onChainData[1] || "",
+            id:           Number(onChainData.id ?? onChainData[0] ?? i),
+            recipient:    onChainData.recipient  || onChainData[1] || "",
             totalDonated: onChainData.totalDonated || onChainData[4] || "0",
-            status: onChainData.status ?? onChainData[3],
-            active: onChainData.active ?? onChainData[6],
+            status:       onChainData.status  ?? onChainData[3],
+            active:       onChainData.active  ?? onChainData[6],
             metadataCID,
             metadata,
           });
@@ -203,7 +198,6 @@ function ExploreCases({ setMessage, onSelectCase }) {
       }
 
       loadedCases.sort((a, b) => b.id - a.id);
-
       setAllCases(loadedCases);
       setMessage(
         loadedCases.length > 0
@@ -218,111 +212,83 @@ function ExploreCases({ setMessage, onSelectCase }) {
     }
   }
 
-  useEffect(() => {
-    loadCases();
-  }, []);
+  useEffect(() => { loadCases(); }, []);
 
-  function handleApplySearch() {
-    setAppliedSearch(searchText);
-  }
+  // ── filter actions ───────────────────────────────────────────────────────────
+  function handleApplySearch() { setAppliedSearch(searchText); }
 
   function handleClearFilters() {
     setSearchText("");
     setAppliedSearch("");
     setSelectedCountry("");
+    setSelectedState("");
+    setSelectedCity("");
     setSelectedAgeRange("");
     setStartDate("");
     setEndDate("");
     setCurrentPage(0);
   }
 
-  function matchesAgeRange(ageValue, range) {
-    const age = Number(ageValue);
-    if (!range) return true;
-    if (Number.isNaN(age)) return false;
-
-    switch (range) {
-      case "0-12":
-        return age >= 0 && age <= 12;
-      case "13-17":
-        return age >= 13 && age <= 17;
-      case "18-30":
-        return age >= 18 && age <= 30;
-      case "31-59":
-        return age >= 31 && age <= 59;
-      case "60+":
-        return age >= 60;
-      default:
-        return true;
-    }
-  }
-
-  function matchesDateInterval(caseDateValue, fromDate, toDate) {
-    if (!fromDate && !toDate) return true;
-    if (!caseDateValue) return false;
-
-    const caseDate = new Date(caseDateValue);
-    if (Number.isNaN(caseDate.getTime())) return false;
-
-    if (fromDate) {
-      const from = new Date(fromDate);
-      if (caseDate < from) return false;
-    }
-
-    if (toDate) {
-      const to = new Date(toDate);
-      to.setHours(23, 59, 59, 999);
-      if (caseDate > to) return false;
-    }
-
-    return true;
-  }
-
+  // ── filtering ────────────────────────────────────────────────────────────────
   const filteredCases = useMemo(() => {
     const q = appliedSearch.trim().toLowerCase();
 
     return allCases.filter((item) => {
-      const name = String(item.metadata?.name || "").toLowerCase();
-      const country = String(item.metadata?.country || "").toLowerCase();
-      const city = String(item.metadata?.city || "").toLowerCase();
+      const name        = String(item.metadata?.name        || "").toLowerCase();
+      const country     = String(item.metadata?.country     || "").toLowerCase();
+      const city        = String(item.metadata?.city        || "").toLowerCase();
+      const state       = String(item.metadata?.state       || "").toLowerCase();
       const description = String(item.metadata?.description || "").toLowerCase();
-      const id = String(item.id || "");
-      const caseCountryCode = String(item.metadata?.countryCode || "");
-      const caseAge = item.metadata?.age;
+      const id          = String(item.id || "");
+
+      const caseCountryCode = String(item.metadata?.countryCode  || "");
+      const caseStateId     = String(item.metadata?.stateId      || "");
+      const caseCityId      = String(item.metadata?.cityId       || "");
+
+      const caseAge  = item.metadata?.age;
       const caseDate =
         item.metadata?.lastSeenDate ||
-        item.metadata?.missingDate ||
-        item.metadata?.date ||
+        item.metadata?.missingDate  ||
+        item.metadata?.date         ||
         "";
 
       const matchesText =
         !q ||
-        name.includes(q) ||
-        country.includes(q) ||
-        city.includes(q) ||
+        name.includes(q)        ||
+        country.includes(q)     ||
+        city.includes(q)        ||
+        state.includes(q)       ||
         description.includes(q) ||
         id.includes(q);
 
+      // Country: match by iso2 code stored in metadata
       const matchesCountry =
         !selectedCountry || caseCountryCode === selectedCountry;
 
-      const matchesAge = matchesAgeRange(caseAge, selectedAgeRange);
+      // State: match by stateId (numeric string) stored in metadata
+      const matchesState =
+        !selectedState || caseStateId === String(selectedState);
+
+      // City: match by cityId stored in metadata, or fall back to city name
+      const matchesCity =
+        !selectedCity ||
+        caseCityId === String(selectedCity) ||
+        city === (cityList.find((c) => String(c.id) === String(selectedCity))?.name || "").toLowerCase();
+
+      const matchesAge  = matchesAgeRange(caseAge, selectedAgeRange);
       const matchesDate = matchesDateInterval(caseDate, startDate, endDate);
 
-      return matchesText && matchesCountry && matchesAge && matchesDate;
+      return matchesText && matchesCountry && matchesState && matchesCity && matchesAge && matchesDate;
     });
   }, [
-    allCases,
-    appliedSearch,
-    selectedCountry,
-    selectedAgeRange,
-    startDate,
-    endDate,
+    allCases, appliedSearch,
+    selectedCountry, selectedState, selectedCity,
+    selectedAgeRange, startDate, endDate, cityList,
   ]);
 
   const totalFiltered = filteredCases.length;
-  const totalPages = Math.max(1, Math.ceil(totalFiltered / CASES_PER_PAGE));
-  const safePage = Math.min(currentPage, totalPages - 1);
+  const totalPages    = Math.max(1, Math.ceil(totalFiltered / CASES_PER_PAGE));
+  const safePage      = Math.min(currentPage, totalPages - 1);
 
   const visibleCases = useMemo(() => {
     const start = safePage * CASES_PER_PAGE;
@@ -331,36 +297,33 @@ function ExploreCases({ setMessage, onSelectCase }) {
 
   useEffect(() => {
     setCurrentPage(0);
-  }, [appliedSearch, selectedCountry, selectedAgeRange, startDate, endDate]);
+  }, [appliedSearch, selectedCountry, selectedState, selectedCity, selectedAgeRange, startDate, endDate]);
 
-  function handlePrevPage() {
-    setCurrentPage((prev) => Math.max(prev - 1, 0));
-  }
-
-  function handleNextPage() {
-    setCurrentPage((prev) => Math.min(prev + 1, totalPages - 1));
-  }
+  function handlePrevPage() { setCurrentPage((p) => Math.max(p - 1, 0)); }
+  function handleNextPage()  { setCurrentPage((p) => Math.min(p + 1, totalPages - 1)); }
 
   function handleSelectCase(caseId) {
-    if (typeof onSelectCase === "function") {
-      onSelectCase(caseId);
-    }
+    if (typeof onSelectCase === "function") onSelectCase(caseId);
     setMessage(`Caso ${caseId} enviado al lector`);
   }
 
   const startCount = totalFiltered === 0 ? 0 : safePage * CASES_PER_PAGE + 1;
-  const endCount = Math.min((safePage + 1) * CASES_PER_PAGE, totalFiltered);
+  const endCount   = Math.min((safePage + 1) * CASES_PER_PAGE, totalFiltered);
 
   const activeFilterCount = [
     appliedSearch,
     selectedCountry,
+    selectedState,
+    selectedCity,
     selectedAgeRange,
     startDate,
     endDate,
   ].filter(Boolean).length;
 
+  // ── render ───────────────────────────────────────────────────────────────────
   return (
     <section id="explorar" className="section-card explore-cases-card">
+      {/* ── top bar ── */}
       <div className="explore-topbar">
         <div className="explore-topbar-copy">
           <h2 className="section-title">Explorar casos</h2>
@@ -380,6 +343,7 @@ function ExploreCases({ setMessage, onSelectCase }) {
         </button>
       </div>
 
+      {/* ── filters panel ── */}
       <div className="explore-filters-panel">
         <div className="explore-panel-heading">
           <div className="explore-panel-title-wrap">
@@ -394,17 +358,13 @@ function ExploreCases({ setMessage, onSelectCase }) {
                 {activeFilterCount > 1 ? "s" : ""}
               </span>
             )}
-
-            <button
-              type="button"
-              className="explore-clear-button"
-              onClick={handleClearFilters}
-            >
+            <button type="button" className="explore-clear-button" onClick={handleClearFilters}>
               Limpiar
             </button>
           </div>
         </div>
 
+        {/* search row */}
         <div className="explore-primary-search-row">
           <button
             type="button"
@@ -421,11 +381,8 @@ function ExploreCases({ setMessage, onSelectCase }) {
               placeholder="Buscar por nombre, país, ciudad o ID"
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleApplySearch();
-              }}
+              onKeyDown={(e) => { if (e.key === "Enter") handleApplySearch(); }}
             />
-
             <button
               type="button"
               className="explore-search-button"
@@ -438,7 +395,10 @@ function ExploreCases({ setMessage, onSelectCase }) {
           </div>
         </div>
 
+        {/* secondary filters – 3-col location cascade + age + dates */}
         <div className="explore-secondary-filters-grid">
+
+          {/* País */}
           <div className="explore-filter-field">
             <label className="explore-field-label">País</label>
             <select
@@ -448,14 +408,59 @@ function ExploreCases({ setMessage, onSelectCase }) {
               aria-label="Filtrar por país"
             >
               <option value="">Todos los países</option>
-              {COUNTRIES.map((country) => (
-                <option key={country.code} value={country.code}>
-                  {country.name}
-                </option>
+              {SORTED_COUNTRIES.map((c) => (
+                <option key={c.code} value={c.code}>{c.name}</option>
               ))}
             </select>
           </div>
 
+          {/* Estado / Región */}
+          <div className="explore-filter-field">
+            <label className="explore-field-label">Estado / Región</label>
+            <select
+              className="form-input compact-input explore-filter-select"
+              value={selectedState}
+              onChange={(e) => setSelectedState(e.target.value)}
+              disabled={!selectedCountry || stateList.length === 0}
+              aria-label="Filtrar por estado o región"
+            >
+              <option value="">
+                {!selectedCountry
+                  ? "Selecciona un país"
+                  : stateList.length === 0
+                  ? "Sin regiones"
+                  : "Todas las regiones"}
+              </option>
+              {stateList.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Ciudad */}
+          <div className="explore-filter-field">
+            <label className="explore-field-label">Ciudad</label>
+            <select
+              className="form-input compact-input explore-filter-select"
+              value={selectedCity}
+              onChange={(e) => setSelectedCity(e.target.value)}
+              disabled={!selectedState || cityList.length === 0}
+              aria-label="Filtrar por ciudad"
+            >
+              <option value="">
+                {!selectedState
+                  ? "Selecciona una región"
+                  : cityList.length === 0
+                  ? "Sin ciudades"
+                  : "Todas las ciudades"}
+              </option>
+              {cityList.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Edad */}
           <div className="explore-filter-field">
             <label className="explore-field-label">Edad</label>
             <select
@@ -473,50 +478,51 @@ function ExploreCases({ setMessage, onSelectCase }) {
             </select>
           </div>
 
+          {/* Desde */}
           <div className="explore-filter-field">
             <label className="explore-field-label">Desde</label>
-            <div className="explore-date-input-wrap">
-              <input
-                type="date"
-                className="form-input compact-input explore-date-input"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                aria-label="Fecha inicial"
-              />
-            </div>
+            <input
+              type="date"
+              className="form-input compact-input explore-date-input"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              aria-label="Fecha inicial"
+            />
           </div>
 
+          {/* Hasta */}
           <div className="explore-filter-field">
             <label className="explore-field-label">Hasta</label>
-            <div className="explore-date-input-wrap">
-              <input
-                type="date"
-                className="form-input compact-input explore-date-input"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                aria-label="Fecha final"
-              />
-            </div>
+            <input
+              type="date"
+              className="form-input compact-input explore-date-input"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              aria-label="Fecha final"
+            />
           </div>
+
         </div>
       </div>
 
+      {/* ── results bar ── */}
       {!isLoading && (
         <div className="explore-results-bar">
           <div className="explore-results-copy">
             <span className="explore-results-title">Resultados</span>
             <span className="explore-results-text">
-              Mostrando <strong>{startCount}-{endCount}</strong> de{" "}
+              Mostrando <strong>{startCount}–{endCount}</strong> de{" "}
               <strong>{totalFiltered}</strong> caso{totalFiltered === 1 ? "" : "s"}
             </span>
           </div>
         </div>
       )}
 
+      {/* ── grid ── */}
       {isLoading ? (
         <div className="explore-loading-grid">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <div className="explore-poster-card skeleton" key={index}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div className="explore-poster-card skeleton" key={i}>
               <div className="explore-poster-image skeleton-block" />
               <div className="explore-poster-line skeleton-line large" />
               <div className="explore-poster-line skeleton-line" />
@@ -530,10 +536,32 @@ function ExploreCases({ setMessage, onSelectCase }) {
             {visibleCases.map((item) => {
               const posterSrc = ipfsToHttp(
                 item.metadata?.posterImage ||
-                  (Array.isArray(item.metadata?.gallery)
-                    ? item.metadata.gallery[0]
-                    : "")
+                  (Array.isArray(item.metadata?.gallery) ? item.metadata.gallery[0] : "")
               );
+
+              // Build location string using worldData names when available
+              const locationParts = [];
+              if (item.metadata?.city)    locationParts.push(item.metadata.city);
+              if (item.metadata?.state)   locationParts.push(item.metadata.state);
+              if (item.metadata?.country) locationParts.push(item.metadata.country);
+              const locationStr = locationParts.join(", ") || "Ubicación no disponible";
+
+              const lastSeenDate =
+                item.metadata?.lastSeenDate ||
+                item.metadata?.missingDate  ||
+                item.metadata?.date         ||
+                null;
+
+              const formattedDate = lastSeenDate
+                ? new Date(lastSeenDate).toLocaleDateString("es-PE", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  })
+                : null;
+
+              const statusClass = getCaseStatusClass(item.status);
+              const statusLabel = getCaseStatusLabel(item.status);
 
               return (
                 <button
@@ -542,6 +570,7 @@ function ExploreCases({ setMessage, onSelectCase }) {
                   className="explore-poster-card"
                   onClick={() => handleSelectCase(item.id)}
                 >
+                  {/* image */}
                   <div className="explore-poster-image-wrap">
                     {posterSrc ? (
                       <img
@@ -551,47 +580,53 @@ function ExploreCases({ setMessage, onSelectCase }) {
                       />
                     ) : (
                       <div className="explore-poster-image empty">
-                        Sin imagen
+                        <PersonIcon />
+                        <span>Sin imagen</span>
                       </div>
                     )}
+
+                    {/* status badge overlaid on image */}
+                    <span className={`explore-case-status-badge ${statusClass}`}>
+                      {statusLabel}
+                    </span>
                   </div>
 
+                  {/* body */}
                   <div className="explore-poster-body">
                     <h3 className="explore-poster-name">
                       {item.metadata?.name || "Persona no identificada"}
                     </h3>
 
-                    <p className="explore-poster-location">
-                      {[item.metadata?.city, item.metadata?.country]
-                        .filter(Boolean)
-                        .join(", ") || "Ubicación no disponible"}
-                    </p>
-
-                    <div className="explore-poster-status-row">
-                      <span
-                        className={`explore-case-status ${getCaseStatusClass(
-                          item.status
-                        )}`}
-                      >
-                        {getCaseStatusLabel(item.status)}
+                    <div className="explore-poster-meta">
+                      <span className="explore-poster-meta-item">
+                        <MapPinIcon />
+                        {locationStr}
                       </span>
-                    </div>
 
-                    <div className="explore-poster-footer">
-                      <span className="explore-case-id">ID #{item.id}</span>
-                      <span className="explore-case-age">
-                        {item.metadata?.age !== undefined &&
-                        item.metadata?.age !== null
-                          ? `${item.metadata.age} años`
-                          : "Edad N/D"}
-                      </span>
+                      {formattedDate && (
+                        <span className="explore-poster-meta-item">
+                          <CalendarIcon />
+                          {formattedDate}
+                        </span>
+                      )}
                     </div>
+                  </div>
+
+                  {/* footer */}
+                  <div className="explore-poster-footer">
+                    <span className="explore-case-id">ID #{item.id}</span>
+                    <span className="explore-case-age">
+                      {item.metadata?.age != null
+                        ? `${item.metadata.age} años`
+                        : "Edad N/D"}
+                    </span>
                   </div>
                 </button>
               );
             })}
           </div>
 
+          {/* pagination */}
           <div className="explore-pagination">
             <button
               type="button"

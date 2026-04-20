@@ -129,7 +129,7 @@ function ReadCase({
           className="form-input compact-input search-case-input"
           type="number"
           min="0"
-          placeholder="ID del caso"
+placeholder="Ej: 1, 25, 102..."
           value={caseId}
           onChange={(e) => setCaseId(e.target.value)}
           onKeyDown={(e) => {
@@ -154,7 +154,15 @@ function ReadCase({
           </span>
         </button>
       </div>
+<p className="search-help-text">
+  Ingresa el ID del caso registrado en blockchain
+</p>
 
+{isLoading && (
+  <div className="loading-case">
+    Buscando caso en blockchain...
+  </div>
+)}
       <CaseCard
         account={account}
         readResult={readResult}

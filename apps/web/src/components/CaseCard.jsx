@@ -3,6 +3,8 @@ import { donateToCase, formatWeiToBNB } from "../services/contract";
 import { buildGalleryFromMetadata } from "../services/ipfs";
 import { ACTIVE_NETWORK } from "../config";
 import { getCurrentProvider, switchToActiveNetwork } from "../web3";
+import { getWriteContract } from "../services/contract";
+import { getWalletWeb3 } from "../web3";
 
 function getExplorerBaseUrl() {
   return (
@@ -146,6 +148,7 @@ function CaseCard({
   const [isDonating, setIsDonating] = useState(false);
   const [chainId, setChainId] = useState("");
   const [isCheckingNetwork, setIsCheckingNetwork] = useState(false);
+  const [isViewerOpen, setIsViewerOpen] = useState(false);
 
   const galleryImages = useMemo(
     () => buildGalleryFromMetadata(caseMetadata),
@@ -185,13 +188,18 @@ function CaseCard({
     : "";
 
   const isConnected = Boolean(account);
-  const isCorrectNetwork = chainId === ACTIVE_NETWORK.chainId;
-  const canDonate =
-    isConnected &&
-    isCorrectNetwork &&
-    !isDonating &&
-    donationAmount &&
-    Number(donationAmount) > 0;
+const isCorrectNetwork =
+  Number(chainId) === Number(ACTIVE_NETWORK.chainId);
+
+  const isCaseActive = Boolean(readResult?.active);
+
+const canDonate =
+  isConnected &&
+  isCorrectNetwork &&
+  isCaseActive &&
+  !isDonating &&
+  donationAmount &&
+  Number(donationAmount) > 0;
 
   function handlePrevImage() {
     setActiveImageIndex((prev) => {
@@ -226,56 +234,101 @@ function CaseCard({
     }
   }
 
-  async function handleDonate() {
-    try {
-      if (!isConnected) {
-        throw new Error("Primero conecta una wallet compatible");
-      }
-
-      if (!isCorrectNetwork) {
-        throw new Error("Debes conectarte a BNB Smart Chain para donar");
-      }
-
-      if (!donationAmount || Number(donationAmount) <= 0) {
-        throw new Error("Ingresa una cantidad válida de BNB");
-      }
-
-      setIsDonating(true);
-      setMessage("Enviando donación en BNB...");
-
-      await donateToCase(readResult.id, donationAmount, account);
-
-      setMessage("Donación en BNB realizada correctamente");
-      setDonationAmount("");
-    } catch (error) {
-      console.error(error);
-      setMessage(error.message || "Error al donar");
-    } finally {
-      setIsDonating(false);
+async function handleDonate() {
+  try {
+    if (!isConnected) {
+      throw new Error("Primero conecta una wallet compatible");
     }
+
+    if (!isCorrectNetwork) {
+      throw new Error("Debes conectarte a BNB Smart Chain para donar");
+    }
+
+    if (!readResult?.active) {
+      throw new Error("Este caso ya no acepta donaciones");
+    }
+
+    if (!donationAmount || Number(donationAmount) <= 0) {
+      throw new Error("Ingresa una cantidad válida de BNB");
+    }
+
+    setIsDonating(true);
+    setMessage("Validando transacción...");
+
+    // 🔥 PRE-CHECK (EVITA ERROR DE METAMASK)
+    const contract = getWriteContract();
+    const web3 = getWalletWeb3();
+    const value = web3.utils.toWei(String(donationAmount), "ether");
+
+    await contract.methods.donate(readResult.id).call({
+      from: account,
+      value,
+    });
+
+    setMessage("Enviando donación en BNB...");
+
+    await donateToCase(readResult.id, donationAmount, account);
+
+    setMessage("Donación en BNB realizada correctamente");
+    setDonationAmount("");
+  } catch (error) {
+    console.error(error);
+
+    if (error?.message?.includes("InactiveCase")) {
+      setMessage("Este caso ya no acepta donaciones");
+    } else if (error?.message?.includes("CaseNotFound")) {
+      setMessage("El caso no existe");
+    } else if (error?.message?.includes("TransferFailed")) {
+      setMessage("Error al enviar fondos al destinatario");
+    } else {
+      setMessage(error.message || "Error al donar");
+    }
+  } finally {
+    setIsDonating(false);
   }
+}
 
   function handleOpenRecipientProfile() {
     if (typeof onOpenUserPanel === "function" && readResult?.recipient) {
       onOpenUserPanel(readResult.recipient);
     }
   }
+  async function handleDownloadImage() {
+  try {
+    if (!currentImage) return;
 
-  return (
+    const response = await fetch(currentImage);
+    const blob = await response.blob();
+
+    const url = window.URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "imagen-caso.jpg";
+    document.body.appendChild(a);
+    a.click();
+
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error(error);
+    setMessage("Error al descargar la imagen");
+  }
+}
+
+return (
+  <>
     <div className="case-card improved-case-card">
       <div className="case-card-top improved-case-top">
         <div className="case-image-wrap improved-case-image-wrap">
           <div className="case-image-tools">
             {currentImage ? (
-              <a
-                className="case-download-button"
-                href={currentImage}
-                download
-                target="_blank"
-                rel="noreferrer"
-              >
-                Descargar
-              </a>
+<button
+  className="case-view-button"
+  onClick={() => setIsViewerOpen(true)}
+>
+  Ver imagen
+</button>
             ) : null}
           </div>
 
@@ -333,26 +386,22 @@ function CaseCard({
           </p>
 
           <div className="case-meta-grid improved-case-meta-grid">
-            <div className="meta-box">
-              <span className="meta-label">País</span>
-              <div className="meta-value">
-                {caseMetadata?.country || "No disponible"}
-              </div>
-            </div>
 
-            <div className="meta-box">
-              <span className="meta-label">Código país</span>
-              <div className="meta-value">
-                {caseMetadata?.countryCode || "No disponible"}
-              </div>
-            </div>
+<div className="meta-box meta-box-full">
+  <span className="meta-label">Ubicación</span>
 
-            <div className="meta-box">
-              <span className="meta-label">Ciudad</span>
-              <div className="meta-value">
-                {caseMetadata?.city || "No disponible"}
-              </div>
-            </div>
+  <div className="meta-value location-value">
+    <span className="location-icon">📍</span>
+
+    {[
+      caseMetadata?.city,
+      caseMetadata?.stateName,
+      caseMetadata?.country,
+    ]
+      .filter(Boolean)
+      .join(", ") || "No disponible"}
+  </div>
+</div>
 
             <div className="meta-box">
               <span className="meta-label">Edad</span>
@@ -457,7 +506,13 @@ function CaseCard({
                   <HeartIcon />
                   <span>{isDonating ? "Donando..." : "Donar BNB"}</span>
                 </button>
+
               </div>
+                              {!readResult?.active && (
+  <p className="donation-helper-text warning">
+    Este caso ya no acepta donaciones.
+  </p>
+)}
 
               {!isConnected && (
                 <p className="donation-helper-text">
@@ -512,17 +567,6 @@ function CaseCard({
               <span className="meta-label">Wallet receptora</span>
 
               <div className="wallet-chain-actions">
-                {readResult?.recipient ? (
-                  <button
-                    type="button"
-                    className="wallet-profile-link-button"
-                    aria-label="Ver perfil del usuario"
-                    title="Ver perfil del usuario"
-                    onClick={handleOpenRecipientProfile}
-                  >
-                    <UserProfileIcon />
-                  </button>
-                ) : null}
 
                 {readResult?.recipient ? (
                   <a
@@ -538,6 +582,7 @@ function CaseCard({
                 ) : null}
               </div>
             </div>
+            
 
             <div className="meta-value wallet-chain-value">
               {readResult.recipient || "No disponible"}
@@ -546,7 +591,28 @@ function CaseCard({
         </div>
       </div>
     </div>
-  );
+    {isViewerOpen && (
+      <div
+        className="image-viewer-overlay"
+        onClick={() => setIsViewerOpen(false)}
+      >
+        <img
+          src={currentImage}
+          alt="Vista completa"
+          className="image-viewer-full"
+          onClick={(e) => e.stopPropagation()}
+        />
+
+        <button
+          className="image-viewer-close"
+          onClick={() => setIsViewerOpen(false)}
+        >
+          ✕
+        </button>
+      </div>
+    )}
+  </>
+);
 }
 
 export default CaseCard;

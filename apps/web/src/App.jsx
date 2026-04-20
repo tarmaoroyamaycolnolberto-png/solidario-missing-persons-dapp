@@ -4,14 +4,16 @@ import CreateCaseForm from "./components/CreateCaseForm";
 import ReadCase from "./components/ReadCase";
 import ExploreCases from "./components/ExploreCases";
 import UserDashboardModal from "./components/UserDashboardModal";
-import { API_BASE_URL } from "./config";  import {
-  
+import { API_BASE_URL } from "./config";  
+
+import {
   getCurrentProvider,
   getWalletWeb3,
   resetWalletConnection,
   switchToActiveNetwork,
 } from "./web3";
 import "./App.css";
+import { PROJECT_SUPPORT_WALLET } from "./config";
 
 
 function AccordionArrow({ isOpen }) {
@@ -255,49 +257,90 @@ function App() {
     };
   }, []);
 
-  async function handleSupportProject() {
+  useEffect(() => {
+  async function restoreConnection() {
     try {
-      if (!account) {
-        throw new Error("Primero conecta tu wallet");
-      }
-
-      if (!PROJECT_SUPPORT_WALLET || PROJECT_SUPPORT_WALLET === "TU_WALLET_AQUI") {
-        throw new Error("Configura PROJECT_SUPPORT_WALLET en tu archivo config");
-      }
-
-      if (!projectSupportAmount || Number(projectSupportAmount) <= 0) {
-        throw new Error("Ingresa una cantidad válida de BNB");
-      }
-
-      setIsSupportingProject(true);
-      setMessage("Enviando apoyo al proyecto...");
-
-      await switchToActiveNetwork();
-
       const provider = getCurrentProvider();
-      if (provider?.request) {
-        await provider.request({ method: "eth_requestAccounts" });
-      }
+      if (!provider) return;
 
-      const web3 = getWalletWeb3();
-      const value = web3.utils.toWei(String(projectSupportAmount), "ether");
-
-      await web3.eth.sendTransaction({
-        from: account,
-        to: PROJECT_SUPPORT_WALLET,
-        value,
+      const accounts = await provider.request({
+        method: "eth_accounts",
       });
 
-      setProjectSupportAmount("");
-      setShowSupportToast(true);
-      setMessage("Gracias por apoyar el proyecto con BNB");
+if (accounts && accounts.length > 0) {
+  setAccount(accounts[0]);
+  setMessage("Wallet restaurada automáticamente");
+}
     } catch (error) {
-      console.error(error);
-      setMessage(error.message || "No se pudo enviar el apoyo");
-    } finally {
-      setIsSupportingProject(false);
+      console.error("Error restaurando wallet:", error);
     }
   }
+
+  restoreConnection();
+}, []);
+
+async function handleSupportProject() {
+  try {
+    if (!account) {
+      throw new Error("Primero conecta tu wallet");
+    }
+
+    if (!PROJECT_SUPPORT_WALLET) {
+      throw new Error("Wallet de destino no configurada");
+    }
+
+    if (!projectSupportAmount || Number(projectSupportAmount) <= 0) {
+      throw new Error("Ingresa una cantidad válida de BNB");
+    }
+
+    setIsSupportingProject(true);
+    setMessage("Preparando transacción...");
+
+    // 🔥 ASEGURA PROVIDER
+    let provider = getCurrentProvider();
+
+    if (!provider) {
+      throw new Error("No se detectó provider. Reconecta tu wallet.");
+    }
+
+    // 🔥 ASEGURA RED
+    await switchToActiveNetwork(provider);
+
+    // 🔥 ASEGURA PERMISOS
+    await provider.request({ method: "eth_requestAccounts" });
+
+    const web3 = getWalletWeb3();
+
+    const value = web3.utils.toWei(
+      String(projectSupportAmount),
+      "ether"
+    );
+
+    setMessage("Confirmando transacción en wallet...");
+
+    await web3.eth.sendTransaction({
+      from: account,
+      to: PROJECT_SUPPORT_WALLET,
+      value,
+    });
+
+    setProjectSupportAmount("");
+    setShowSupportToast(true);
+    setMessage("Transacción enviada correctamente 🚀");
+
+  } catch (error) {
+    console.error("ERROR APOYO:", error);
+
+    if (error.code === 4001) {
+      setMessage("Transacción cancelada por el usuario");
+    } else {
+      setMessage(error.message || "Error al enviar BNB");
+    }
+
+  } finally {
+    setIsSupportingProject(false);
+  }
+}
 
   return (
     <div className={`app-shell ${theme === "dark" ? "dark-theme" : "light-theme"}`}>
@@ -411,12 +454,12 @@ function App() {
                       <span className="project-support-currency">BNB</span>
                     </div>
 
-                    <button
-                      type="button"
-                      className="primary-button project-support-button"
-                      onClick={handleSupportProject}
-                      disabled={isSupportingProject}
-                    >
+<button
+  type="button"
+  className="primary-button project-support-button"
+  onClick={handleSupportProject}
+  disabled={isSupportingProject || !account}
+>
                       <HeartSupportIcon />
                       <span>{isSupportingProject ? "Apoyando..." : "Apoyar"}</span>
                     </button>
